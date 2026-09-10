@@ -8,7 +8,7 @@
         <version>3.2.5</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
-    <groupId>com.odiparpack</groupId>
+    <groupId>com.paqrap</groupId>
     <artifactId>logistics-backend</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <name>logistics-backend</name>

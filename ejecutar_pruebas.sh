@@ -10,7 +10,7 @@ cd "$SCRIPT_DIR"
 chmod +x "$SCRIPT_DIR/probar_metaheuristicas.py"
 
 echo "================================================================================"
-echo "          ODIPARPACK: EVALUADOR DE ALGORITMOS METAHEURÍSTICOS                  "
+echo "          PAQRAP: EVALUADOR DE ALGORITMOS METAHEURÍSTICOS                     "
 echo "================================================================================"
 
 MODO="${1:-rapido}"
@@ -49,7 +49,7 @@ case "$MODO" in
     java)
         echo "Modo: Ejecución mediante Runner Nativo Java..."
         cd "$SCRIPT_DIR/backend"
-        mvn compile exec:java -Dexec.mainClass="com.odiparpack.logistics.planificacion.algoritmo.BenchmarkMetaheuristicas" -Dexec.args="$MES"
+        mvn compile exec:java -Dexec.mainClass="com.paqrap.logistics.planificacion.algoritmo.BenchmarkMetaheuristicas" -Dexec.args="$MES"
         ;;
     *)
         echo "Uso: ./ejecutar_pruebas.sh [rapido|intermedio|estres|detalle|aco|alns|exportar|java] [MES_AAAAMM]"

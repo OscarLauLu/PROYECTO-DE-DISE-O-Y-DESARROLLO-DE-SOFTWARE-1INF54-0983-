@@ -2,7 +2,7 @@
 """
 ================================================================================
 SCRIPT DE BENCHMARK Y EVALUACIÓN DE METAHEURÍSTICOS: ACO vs. ALNS
-Proyecto de Diseño y Desarrollo de Software (1INF54-0983) - OdiparPack
+Proyecto de Diseño y Desarrollo de Software (1INF54-0983) - PaqRap
 ================================================================================
 Prueba los algoritmos metaheurísticos Ant Colony Optimization (ACO) y
 Adaptive Large Neighborhood Search (ALNS) sobre la red ortogonal de 70x50 km,
@@ -745,7 +745,7 @@ def main():
     ruta_bloqueos = os.path.join(datos_dir, "bloqueos", f"bloqueo.{mes_corto}.txt")
 
     print("\n" + "="*85)
-    print("      SISTEMA LOGÍSTICO ODIPARPACK - EVALUADOR DE METAHEURÍSTICOS      ")
+    print("      SISTEMA LOGÍSTICO PAQRAP - EVALUADOR DE METAHEURÍSTICOS         ")
     print("="*85)
     print(f"  Mes de evaluación       : {args.mes}")
     print(f"  Archivo de pedidos      : {os.path.relpath(ruta_ventas, base_dir)}")

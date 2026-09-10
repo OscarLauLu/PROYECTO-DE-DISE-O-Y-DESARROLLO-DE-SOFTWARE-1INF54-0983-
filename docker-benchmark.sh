@@ -28,6 +28,6 @@ elif docker compose version >/dev/null 2>&1; then
 # 3. Fallback universal: docker build + docker run
 else
     echo "-> Usando docker directo (construyendo imagen si no existe)..."
-    docker build -t odiparpack .
-    docker run --rm -v "$SCRIPT_DIR/datos:/app/datos:ro" odiparpack benchmark "$MES" "$PEDIDOS"
+    docker build -t paqrap .
+    docker run --rm -v "$SCRIPT_DIR/datos:/app/datos:ro" paqrap benchmark "$MES" "$PEDIDOS"
 fi

@@ -18,8 +18,8 @@ RUN mvn clean package -Dmaven.test.skip=true
 # ==============================================================================
 FROM eclipse-temurin:17-jre-alpine
 
-LABEL maintainer="OdiparPack Logistics <support@odiparpack.com>"
-LABEL description="Sistema Logístico OdiparPack - Benchmark y API de Algoritmos Metaheurísticos"
+LABEL maintainer="PaqRap Logistics <support@paqrap.com>"
+LABEL description="Sistema Logístico PaqRap - Benchmark y API de Algoritmos Metaheurísticos"
 
 WORKDIR /app
 

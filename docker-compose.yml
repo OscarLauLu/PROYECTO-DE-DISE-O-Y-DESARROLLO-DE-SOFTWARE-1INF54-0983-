@@ -6,7 +6,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: odiparpack-app
+    container_name: paqrap-app
     ports:
       - "8080:8080"
     environment:
@@ -23,7 +23,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: odiparpack-benchmark
+    container_name: paqrap-benchmark
     volumes:
       - ./datos:/app/datos:ro
     command: ["benchmark", "202601", "30"]
@@ -33,7 +33,7 @@ services:
   # ----------------------------------------------------------------------------
   db:
     image: postgres:15-alpine
-    container_name: odiparpack-postgres
+    container_name: paqrap-postgres
     ports:
       - "5432:5432"
     environment:

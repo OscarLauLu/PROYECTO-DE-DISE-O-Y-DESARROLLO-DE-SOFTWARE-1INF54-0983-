@@ -23,7 +23,7 @@ elif [ "$1" = "sh" ] || [ "$1" = "bash" ]; then
 # Modo 4: Servidor Web Spring Boot por defecto
 elif [ "$1" = "web" ]; then
     echo "================================================================================"
-    echo "  INICIANDO SERVIDOR WEB SPRING BOOT: ODIPARPACK LOGISTICS API                 "
+    echo "  INICIANDO SERVIDOR WEB SPRING BOOT: PAQRAP LOGISTICS API                    "
     echo "  Swagger UI disponible en: http://localhost:8080/swagger-ui.html              "
     echo "================================================================================"
     exec java -jar /app/app.jar

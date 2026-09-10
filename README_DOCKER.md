@@ -1,4 +1,4 @@
-# Guía de Ejecución con Docker: OdiparPack Logistics
+# Guía de Ejecución con Docker: PaqRap Logistics
 
 Esta guía explica cómo compilar y ejecutar todo el sistema logístico y el benchmark de algoritmos metaheurísticos (**ACO** vs **ALNS**) usando **Docker** y **Docker Compose**.
 
@@ -52,20 +52,20 @@ docker compose run --rm benchmark python --mes 202601 --pedidos 25 --algoritmo a
 
 ### Construir la imagen:
 ```bash
-docker build -t odiparpack .
+docker build -t paqrap .
 ```
 
 ### Ejecutar el benchmark:
 ```bash
 # Benchmark rápido (30 pedidos, mes 202601)
-docker run --rm -v $(pwd)/datos:/app/datos:ro odiparpack benchmark 202601 30
+docker run --rm -v $(pwd)/datos:/app/datos:ro paqrap benchmark 202601 30
 
 # Benchmark con 60 pedidos en 202602
-docker run --rm -v $(pwd)/datos:/app/datos:ro odiparpack benchmark 202602 60
+docker run --rm -v $(pwd)/datos:/app/datos:ro paqrap benchmark 202602 60
 ```
 
 ### Iniciar el servidor API web:
 ```bash
-docker run -d --name odiparpack-api -p 8080:8080 -v $(pwd)/datos:/app/datos:ro odiparpack
+docker run -d --name paqrap-api -p 8080:8080 -v $(pwd)/datos:/app/datos:ro paqrap
 ```
 Accede a la documentación OpenAPI en: `http://localhost:8080/swagger-ui.html`
