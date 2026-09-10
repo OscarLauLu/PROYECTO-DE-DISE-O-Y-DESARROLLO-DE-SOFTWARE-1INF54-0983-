@@ -1,0 +1,11 @@
+.git
+.gitignore
+.idea
+.vscode
+*.iml
+backend/target
+target
+scratch
+*.log
+__pycache__
+*.pyc

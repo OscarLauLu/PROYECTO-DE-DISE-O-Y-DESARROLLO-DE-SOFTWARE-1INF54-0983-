@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------------------------------
+  # Servidor Web Spring Boot (API REST + Swagger UI en puerto 8080)
+  # ----------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: odiparpack-app
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=default
+    volumes:
+      # Monta la carpeta datos para leer archivos en tiempo real sin reconstruir
+      - ./datos:/app/datos:ro
+    command: ["web"]
+
+  # ----------------------------------------------------------------------------
+  # Servicio para ejecutar el Benchmark de Algoritmos Metaheurísticos en Java
+  # ----------------------------------------------------------------------------
+  benchmark:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: odiparpack-benchmark
+    volumes:
+      - ./datos:/app/datos:ro
+    command: ["benchmark", "202601", "30"]
+
+  # ----------------------------------------------------------------------------
+  # Base de Datos PostgreSQL opcional (para perfil prod)
+  # ----------------------------------------------------------------------------
+  db:
+    image: postgres:15-alpine
+    container_name: odiparpack-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: logistics
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    profiles:
+      - with-db
+
+volumes:
+  pgdata:

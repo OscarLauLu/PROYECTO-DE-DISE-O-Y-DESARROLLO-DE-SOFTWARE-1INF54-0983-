@@ -27,8 +27,14 @@ public class BenchmarkMetaheuristicas {
         System.out.println("     BENCHMARK DE ALGORITMOS METAHEURÍSTICOS: ACO vs. ALNS (OdiparPack)        ");
         System.out.println("================================================================================");
 
-        String baseDir = System.getProperty("user.dir");
-        String datosDir = baseDir.contains("backend") ? "../datos" : "datos";
+        File dirDatos = new File("datos");
+        if (!dirDatos.exists()) {
+            dirDatos = new File("../datos");
+        }
+        if (!dirDatos.exists()) {
+            dirDatos = new File("/home/sandbox/Documents/DP1/PROYECTO-DE-DISE-O-Y-DESARROLLO-DE-SOFTWARE-1INF54-0983-/datos");
+        }
+        String datosDir = dirDatos.getAbsolutePath();
 
         String rutaVentas = datosDir + "/ventas.v20260909/ventas.202601.txt";
         String rutaBloqueos = datosDir + "/bloqueos/bloqueo.2601.txt";
