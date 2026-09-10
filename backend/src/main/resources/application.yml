@@ -1,0 +1,71 @@
+server:
+  port: 8080
+
+spring:
+  profiles:
+    active: default
+  datasource:
+    url: jdbc:h2:mem:logisticsdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driverClassName: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    defer-datasource-initialization: true
+    properties:
+      hibernate:
+        format_sql: true
+  sql:
+    init:
+      mode: always
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+logistics:
+  config:
+    critical-slack-hours: 4
+    service-time-minutes: 60
+    grid-width: 70
+    grid-height: 50
+    warehouse-max-capacity: 1000
+    warehouse-alert-threshold: 90.0
+    semaphore-green-hours: 12
+    semaphore-amber-hours: 4
+    planning-timeout-seconds: 30
+    daily-restock-time: "23:59:59"
+    vehicles:
+      auto:
+        speed: 40
+        cost: 8.00
+        capacity: 24
+      moto:
+        speed: 25
+        cost: 6.00
+        capacity: 8
+      bicicleta:
+        speed: 12
+        cost: 3.00
+        capacity: 4
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:logistics}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driverClassName: org.postgresql.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: validate
+    show-sql: false

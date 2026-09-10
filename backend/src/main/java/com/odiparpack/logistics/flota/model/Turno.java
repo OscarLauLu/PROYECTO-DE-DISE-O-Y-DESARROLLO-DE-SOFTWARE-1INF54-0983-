@@ -1,0 +1,71 @@
+package com.odiparpack.logistics.flota.model;
+
+import jakarta.persistence.Embeddable;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+
+/**
+ * Representa un turno de trabajo para conductores (RF-43, RF-44).
+ * Turnos estándar:
+ * - Mañana: 07:00 a 15:00
+ * - Tarde: 15:00 a 23:00
+ * - Noche: 23:00 a 07:00 (cruza medianoche)
+ */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@Embeddable
+public class Turno {
+
+    private LocalTime horaInicio;
+    private LocalTime horaFin;
+
+    /**
+     * Calcula la duración del turno en horas.
+     */
+    public int duracionHoras() {
+        if (horaInicio == null || horaFin == null) return 0;
+        if (horaFin.isAfter(horaInicio)) {
+            return (int) Duration.between(horaInicio, horaFin).toHours();
+        } else {
+            // Cruza medianoche (ej: 23:00 a 07:00)
+            return (int) (Duration.between(horaInicio, LocalTime.MAX).toHours() + 1
+                    + Duration.between(LocalTime.MIN, horaFin).toHours());
+        }
+    }
+
+    /**
+     * Determina si un instante temporal dado está dentro de este turno.
+     */
+    public boolean contiene(LocalDateTime instante) {
+        if (instante == null || horaInicio == null || horaFin == null) return false;
+        LocalTime hora = instante.toLocalTime();
+
+        if (!horaFin.isBefore(horaInicio)) {
+            // Turno dentro del mismo día (ej. 07:00 - 15:00)
+            return !hora.isBefore(horaInicio) && hora.isBefore(horaFin);
+        } else {
+            // Turno nocturno que cruza medianoche (ej. 23:00 - 07:00)
+            return !hora.isBefore(horaInicio) || hora.isBefore(horaFin);
+        }
+    }
+
+    public static Turno turnoManana() {
+        return new Turno(LocalTime.of(7, 0), LocalTime.of(15, 0));
+    }
+
+    public static Turno turnoTarde() {
+        return new Turno(LocalTime.of(15, 0), LocalTime.of(23, 0));
+    }
+
+    public static Turno turnoNoche() {
+        return new Turno(LocalTime.of(23, 0), LocalTime.of(7, 0));
+    }
+}

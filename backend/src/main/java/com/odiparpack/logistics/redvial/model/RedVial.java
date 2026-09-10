@@ -1,0 +1,253 @@
+package com.odiparpack.logistics.redvial.model;
+
+import jakarta.annotation.PostConstruct;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+
+import java.time.LocalDateTime;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Representa la red vial y geográfica ortogonal de la ciudad (70x50 km, nodos cada 1 km, sin diagonales ni curvas).
+ * Provee cálculo de distancias ortogonales, pathfinding BFS respetando bloqueos viales, y gestión de tramos.
+ */
+@Slf4j
+@Component
+public class RedVial {
+
+    @Getter
+    private final int anchoKm = 70;
+
+    @Getter
+    private final int altoKm = 50;
+
+    @Getter
+    private final int separacionNodosKm = 1;
+
+    private final Nodo[][] mallaNodos = new Nodo[anchoKm + 1][altoKm + 1];
+    private final Map<String, Tramo> tramos = new ConcurrentHashMap<>();
+    private final Set<String> tramosBloqueadosActivos = ConcurrentHashMap.newKeySet();
+
+    @PostConstruct
+    public void inicializarRed() {
+        log.info("Inicializando RedVial de {}x{} km con nodos cada {} km...", anchoKm, altoKm, separacionNodosKm);
+        for (int x = 0; x <= anchoKm; x++) {
+            for (int y = 0; y <= altoKm; y++) {
+                mallaNodos[x][y] = new Nodo(x, y);
+            }
+        }
+
+        for (int x = 0; x <= anchoKm; x++) {
+            for (int y = 0; y <= altoKm; y++) {
+                Nodo actual = mallaNodos[x][y];
+                // Conexión horizontal derecha
+                if (x + 1 <= anchoKm) {
+                    Nodo derecha = mallaNodos[x + 1][y];
+                    registrarTramo(actual, derecha);
+                }
+                // Conexión vertical arriba
+                if (y + 1 <= altoKm) {
+                    Nodo arriba = mallaNodos[x][y + 1];
+                    registrarTramo(actual, arriba);
+                }
+            }
+        }
+        log.info("RedVial inicializada exitosamente con {} nodos y {} tramos bidireccionales.",
+                (anchoKm + 1) * (altoKm + 1), tramos.size());
+    }
+
+    private void registrarTramo(Nodo origen, Nodo destino) {
+        Tramo tramo = new Tramo(origen, destino);
+        tramos.put(tramo.getClaveCanonica(), tramo);
+    }
+
+    /**
+     * Obtiene el nodo correspondiente a las coordenadas (x, y).
+     */
+    public Nodo obtenerNodo(int x, int y) {
+        if (x < 0 || x > anchoKm || y < 0 || y > altoKm) {
+            return null;
+        }
+        return mallaNodos[x][y];
+    }
+
+    /**
+     * Calcula la distancia Manhattan en kilómetros entre dos nodos.
+     */
+    public double calcularDistancia(Nodo origen, Nodo destino) {
+        if (origen == null || destino == null) {
+            return 0.0;
+        }
+        return Math.abs(origen.getX() - destino.getX()) + Math.abs(origen.getY() - destino.getY());
+    }
+
+    /**
+     * Verifica si un tramo vial está bloqueado en un instante simulado.
+     */
+    public boolean estaBloqueado(Tramo tramo, LocalDateTime instante) {
+        if (tramo == null) return false;
+        if (tramosBloqueadosActivos.contains(tramo.getClaveCanonica())) {
+            return true;
+        }
+        return !tramo.estaDisponible(instante);
+    }
+
+    public boolean estaBloqueadoSegmento(int x1, int y1, int x2, int y2, LocalDateTime instante) {
+        String clave = obtenerClaveCanonica(x1, y1, x2, y2);
+        Tramo tramo = tramos.get(clave);
+        return tramo != null && estaBloqueado(tramo, instante);
+    }
+
+    /**
+     * Calcula la ruta mínima de tramos ortogonales entre origen y destino mediante BFS,
+     * respetando los bloqueos temporales vigentes en el instante dado.
+     * Si no hay bloqueo, devuelve los tramos de la trayectoria ortogonal directa.
+     */
+    public List<Tramo> calcularRutaMinima(Nodo origen, Nodo destino, LocalDateTime instante) {
+        if (origen == null || destino == null) {
+            return Collections.emptyList();
+        }
+        if (origen.equals(destino)) {
+            return Collections.emptyList();
+        }
+
+        Queue<Nodo> cola = new ArrayDeque<>();
+        Map<Nodo, Nodo> padre = new HashMap<>();
+        Set<Nodo> visitados = new HashSet<>();
+
+        cola.add(origen);
+        visitados.add(origen);
+
+        boolean encontrado = false;
+        int[][] direcciones = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+
+        while (!cola.isEmpty()) {
+            Nodo actual = cola.poll();
+            if (actual.equals(destino)) {
+                encontrado = true;
+                break;
+            }
+
+            for (int[] dir : direcciones) {
+                int nx = actual.getX() + dir[0];
+                int ny = actual.getY() + dir[1];
+
+                if (nx >= 0 && nx <= anchoKm && ny >= 0 && ny <= altoKm) {
+                    Nodo vecino = mallaNodos[nx][ny];
+                    if (!visitados.contains(vecino)) {
+                        String claveTramo = obtenerClaveCanonica(actual.getX(), actual.getY(), nx, ny);
+                        Tramo tramo = tramos.get(claveTramo);
+                        if (tramo != null && !estaBloqueado(tramo, instante)) {
+                            visitados.add(vecino);
+                            padre.put(vecino, actual);
+                            cola.add(vecino);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!encontrado) {
+            log.warn("No se encontró ruta libre de bloqueos entre {} y {}. Intentando ruta de contingencia.", origen, destino);
+            return construirRutaOrtogonalDirecta(origen, destino);
+        }
+
+        List<Tramo> ruta = new ArrayList<>();
+        Nodo paso = destino;
+        while (!paso.equals(origen)) {
+            Nodo p = padre.get(paso);
+            String clave = obtenerClaveCanonica(p.getX(), p.getY(), paso.getX(), paso.getY());
+            Tramo t = tramos.get(clave);
+            if (t != null) {
+                ruta.add(0, t);
+            }
+            paso = p;
+        }
+        return ruta;
+    }
+
+    private List<Tramo> construirRutaOrtogonalDirecta(Nodo origen, Nodo destino) {
+        List<Tramo> tramosDirectos = new ArrayList<>();
+        int cx = origen.getX();
+        int cy = origen.getY();
+
+        while (cx != destino.getX()) {
+            int sigX = (destino.getX() > cx) ? cx + 1 : cx - 1;
+            String clave = obtenerClaveCanonica(cx, cy, sigX, cy);
+            Tramo t = tramos.get(clave);
+            if (t != null) tramosDirectos.add(t);
+            cx = sigX;
+        }
+        while (cy != destino.getY()) {
+            int sigY = (destino.getY() > cy) ? cy + 1 : cy - 1;
+            String clave = obtenerClaveCanonica(cx, cy, cx, sigY);
+            Tramo t = tramos.get(clave);
+            if (t != null) tramosDirectos.add(t);
+            cy = sigY;
+        }
+        return tramosDirectos;
+    }
+
+    public void aplicarBloqueo(Bloqueo bloqueo) {
+        if (bloqueo == null || bloqueo.getCoordenadasNodos() == null) return;
+        String[] coords = bloqueo.getCoordenadasNodos().split(",");
+        for (int i = 0; i + 3 < coords.length; i += 2) {
+            try {
+                int x1 = Integer.parseInt(coords[i].trim());
+                int y1 = Integer.parseInt(coords[i + 1].trim());
+                int x2 = Integer.parseInt(coords[i + 2].trim());
+                int y2 = Integer.parseInt(coords[i + 3].trim());
+                String clave = obtenerClaveCanonica(x1, y1, x2, y2);
+                Tramo tramo = tramos.get(clave);
+                if (tramo != null) {
+                    tramo.setBloqueado(true);
+                    tramo.setInicioBloqueo(bloqueo.getFechaHoraInicio());
+                    tramo.setFinBloqueo(bloqueo.getFechaHoraFin());
+                    tramosBloqueadosActivos.add(clave);
+                }
+            } catch (Exception e) {
+                log.error("Error al parsear coordenadas de bloqueo: {}", e.getMessage());
+            }
+        }
+    }
+
+    public void removerBloqueo(Bloqueo bloqueo) {
+        if (bloqueo == null || bloqueo.getCoordenadasNodos() == null) return;
+        String[] coords = bloqueo.getCoordenadasNodos().split(",");
+        for (int i = 0; i + 3 < coords.length; i += 2) {
+            try {
+                int x1 = Integer.parseInt(coords[i].trim());
+                int y1 = Integer.parseInt(coords[i + 1].trim());
+                int x2 = Integer.parseInt(coords[i + 2].trim());
+                int y2 = Integer.parseInt(coords[i + 3].trim());
+                String clave = obtenerClaveCanonica(x1, y1, x2, y2);
+                Tramo tramo = tramos.get(clave);
+                if (tramo != null) {
+                    tramo.setBloqueado(false);
+                    tramosBloqueadosActivos.remove(clave);
+                }
+            } catch (Exception e) {
+                log.error("Error al remover tramo bloqueado: {}", e.getMessage());
+            }
+        }
+    }
+
+    public static String obtenerClaveCanonica(int x1, int y1, int x2, int y2) {
+        if (x1 < x2 || (x1 == x2 && y1 <= y2)) {
+            return x1 + "," + y1 + "-" + x2 + "," + y2;
+        } else {
+            return x2 + "," + y2 + "-" + x1 + "," + y1;
+        }
+    }
+}
