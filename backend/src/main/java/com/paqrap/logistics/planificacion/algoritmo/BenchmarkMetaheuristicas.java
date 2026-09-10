@@ -11,10 +11,16 @@ import com.paqrap.logistics.redvial.model.RedVial;
 import com.paqrap.logistics.redvial.model.Ubicacion;
 import com.paqrap.logistics.simulacion.model.CargadorArchivos;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Runner ejecutable independiente para realizar benchmarks y pruebas comparativas
@@ -38,9 +44,29 @@ public class BenchmarkMetaheuristicas {
 
         String rutaVentas = datosDir + "/ventas.v20260909/ventas.202601.txt";
         String rutaBloqueos = datosDir + "/bloqueos/bloqueo.2601.txt";
+        String rutaMantenimiento = datosDir + "/mant.preventivo.09.10.txt";
         int maxPedidos = 30;
 
-        if (args.length > 0 && !args[0].trim().isEmpty()) {
+        Integer customAutos = null;
+        Integer customMotos = null;
+        Integer customBicis = null;
+
+        for (String arg : args) {
+            if (arg.startsWith("--flota=")) {
+                String[] fParts = arg.substring(8).split(",");
+                if (fParts.length >= 3) {
+                    try {
+                        customAutos = Integer.parseInt(fParts[0].trim());
+                        customMotos = Integer.parseInt(fParts[1].trim());
+                        customBicis = Integer.parseInt(fParts[2].trim());
+                    } catch (Exception ignored) {}
+                }
+            } else if (arg.startsWith("--mant=")) {
+                rutaMantenimiento = arg.substring(7).trim();
+            }
+        }
+
+        if (args.length > 0 && !args[0].trim().isEmpty() && !args[0].startsWith("--")) {
             if (new File(args[0]).exists()) {
                 rutaVentas = args[0];
             } else if (args[0].matches("\\d{6}")) {
@@ -48,10 +74,10 @@ public class BenchmarkMetaheuristicas {
                 rutaBloqueos = datosDir + "/bloqueos/bloqueo." + args[0].substring(2) + ".txt";
             }
         }
-        if (args.length > 1 && !args[1].trim().isEmpty() && new File(args[1]).exists()) {
+        if (args.length > 1 && !args[1].trim().isEmpty() && !args[1].startsWith("--") && new File(args[1]).exists()) {
             rutaBloqueos = args[1];
         }
-        if (args.length > 2 && !args[2].trim().isEmpty()) {
+        if (args.length > 2 && !args[2].trim().isEmpty() && !args[2].startsWith("--")) {
             try {
                 maxPedidos = Integer.parseInt(args[2].trim());
             } catch (Exception ignored) {}
@@ -59,6 +85,7 @@ public class BenchmarkMetaheuristicas {
 
         System.out.println("Archivo de ventas   : " + rutaVentas);
         System.out.println("Archivo de bloqueos : " + rutaBloqueos);
+        System.out.println("Plan de mantenim.   : " + (new File(rutaMantenimiento).exists() ? rutaMantenimiento : "(No disponible)"));
         System.out.println("Límite de pedidos   : " + (maxPedidos > 0 ? maxPedidos : "Todos"));
 
         // 1. Inicializar Red Vial
@@ -90,11 +117,37 @@ public class BenchmarkMetaheuristicas {
         }
         System.out.println("Pedidos a evaluar   : " + pedidosPrueba.size());
 
-        // 4. Crear flota estándar (4 Autos, 3 Motos, 3 Bicicletas)
-        List<UnidadTransporte> flotaAco = crearFlotaEstandar();
-        List<UnidadTransporte> flotaAlns = crearFlotaEstandar();
+        // 4. Crear flota dinámica (descubierta desde archivo de mantenimiento o por parámetros)
+        List<UnidadTransporte> flotaAco = crearFlotaDinamica(rutaMantenimiento, customAutos, customMotos, customBicis);
+        List<UnidadTransporte> flotaAlns = crearFlotaDinamica(rutaMantenimiento, customAutos, customMotos, customBicis);
+        System.out.println("Flota total creada  : " + flotaAco.size() + " unidades");
 
-        // Evaluar si se solicita contingencia por averías mecánicas (RF-14, RF-15)
+        // 4.1. Aplicar Mantenimiento Preventivo según la fecha de los pedidos (RF-42 / Pregunta 19 FAQ)
+        Map<LocalDate, List<String>> mantenimientos = cargador.cargarMantenimientosPreventivos(rutaMantenimiento);
+        LocalDate fechaSimulada = pedidosPrueba.get(0).getFechaHoraRegistro().toLocalDate();
+        List<String> vehiculosEnMant = mantenimientos.get(fechaSimulada);
+        if (vehiculosEnMant != null && !vehiculosEnMant.isEmpty()) {
+            System.out.println("\n" + "-".repeat(80));
+            System.out.println("  [MANTENIMIENTO PREVENTIVO RF-42] Restricción de flota para fecha " + fechaSimulada + ":");
+            for (String cod : vehiculosEnMant) {
+                System.out.println("  -> Unidad " + cod + ": En mantenimiento programado -> Inhabilitada 00:00 - 23:59");
+                for (UnidadTransporte u : flotaAco) {
+                    if (cod.equalsIgnoreCase(u.getCodigo())) {
+                        u.cambiarEstado(EstadoOperativo.EN_MANTENIMIENTO);
+                        u.setActivo(false);
+                    }
+                }
+                for (UnidadTransporte u : flotaAlns) {
+                    if (cod.equalsIgnoreCase(u.getCodigo())) {
+                        u.cambiarEstado(EstadoOperativo.EN_MANTENIMIENTO);
+                        u.setActivo(false);
+                    }
+                }
+            }
+            System.out.println("-".repeat(80));
+        }
+
+        // 4.2. Evaluar si se solicita contingencia por averías mecánicas (RF-14, RF-15)
         boolean conAveria = false;
         for (String a : args) {
             if ("averia".equalsIgnoreCase(a) || "--averia".equalsIgnoreCase(a) || "--averias".equalsIgnoreCase(a)) {
@@ -107,7 +160,6 @@ public class BenchmarkMetaheuristicas {
             System.out.println("  [CONTINGENCIA RF-14 / RF-15] INYECCIÓN DE AVERÍAS EN LA FLOTA:");
             System.out.println("  -> TA02 (Auto): Falla mecánica en motor -> Estado: AVERIADA (Inhabilitado)");
             System.out.println("  -> TM01 (Moto): Falla en transmisión   -> Estado: AVERIADA (Inhabilitado)");
-            System.out.println("  Flota operativa reducida: 8 unidades disponibles (3 Autos, 2 Motos, 3 Bicis)");
             System.out.println("!".repeat(80));
 
             for (UnidadTransporte u : flotaAco) {
@@ -146,24 +198,71 @@ public class BenchmarkMetaheuristicas {
     }
 
     public static List<UnidadTransporte> crearFlotaEstandar() {
+        return crearFlotaDinamica(null, 4, 3, 3);
+    }
+
+    public static List<UnidadTransporte> crearFlotaDinamica(String rutaMantenimiento, Integer nAutos, Integer nMotos, Integer nBicis) {
         List<UnidadTransporte> flota = new ArrayList<>();
         TipoVehiculo auto = TipoVehiculo.builder().id(1L).nombre("Auto").capacidadMaxima(24).velocidadPromedioKmH(40.0).costoPorKm(8.0).build();
         TipoVehiculo moto = TipoVehiculo.builder().id(2L).nombre("Moto").capacidadMaxima(8).velocidadPromedioKmH(25.0).costoPorKm(6.0).build();
         TipoVehiculo bici = TipoVehiculo.builder().id(3L).nombre("Bicicleta").capacidadMaxima(4).velocidadPromedioKmH(12.0).costoPorKm(3.0).build();
 
-        // 4 Autos (TA01..TA04) - Almacén Central (27, 14)
-        for (int i = 1; i <= 4; i++) {
-            flota.add(UnidadTransporte.builder().id((long) i).codigo(String.format("TA%02d", i)).tipo(auto).estadoOperativo(EstadoOperativo.DISPONIBLE).ubicacionActual(new Ubicacion(27, 14)).activo(true).build());
+        Set<String> codigosEncontrados = new TreeSet<>();
+        if (rutaMantenimiento != null && new File(rutaMantenimiento).exists()) {
+            try (BufferedReader br = new BufferedReader(new FileReader(rutaMantenimiento))) {
+                String linea;
+                while ((linea = br.readLine()) != null) {
+                    linea = linea.trim();
+                    if (linea.isEmpty() || linea.startsWith("#")) continue;
+                    String[] partes = linea.split(":");
+                    if (partes.length == 2) {
+                        codigosEncontrados.add(partes[1].trim());
+                    }
+                }
+            } catch (Exception ignored) {}
         }
-        // 3 Motos (TM01..TM03) - Almacén Central (27, 14)
-        for (int i = 1; i <= 3; i++) {
-            flota.add(UnidadTransporte.builder().id((long) (4 + i)).codigo(String.format("TM%02d", i)).tipo(moto).estadoOperativo(EstadoOperativo.DISPONIBLE).ubicacionActual(new Ubicacion(27, 14)).activo(true).build());
+
+        // Si se especificaron cantidades por parámetro (ej. --flota=4,3,3)
+        if (nAutos != null || nMotos != null || nBicis != null) {
+            int cAutos = nAutos != null ? nAutos : 4;
+            int cMotos = nMotos != null ? nMotos : 3;
+            int cBicis = nBicis != null ? nBicis : 3;
+            long id = 1;
+            for (int i = 1; i <= cAutos; i++) {
+                flota.add(UnidadTransporte.builder().id(id++).codigo(String.format("TA%02d", i)).tipo(auto).estadoOperativo(EstadoOperativo.DISPONIBLE).ubicacionActual(new Ubicacion(27, 14)).activo(true).build());
+            }
+            for (int i = 1; i <= cMotos; i++) {
+                flota.add(UnidadTransporte.builder().id(id++).codigo(String.format("TM%02d", i)).tipo(moto).estadoOperativo(EstadoOperativo.DISPONIBLE).ubicacionActual(new Ubicacion(27, 14)).activo(true).build());
+            }
+            for (int i = 1; i <= cBicis; i++) {
+                flota.add(UnidadTransporte.builder().id(id++).codigo(String.format("TB%02d", i)).tipo(bici).estadoOperativo(EstadoOperativo.DISPONIBLE).ubicacionActual(new Ubicacion(27, 14)).activo(true).build());
+            }
+            return flota;
         }
-        // 3 Bicicletas (TB01..TB03) - Almacén Central (27, 14)
-        for (int i = 1; i <= 3; i++) {
-            flota.add(UnidadTransporte.builder().id((long) (7 + i)).codigo(String.format("TB%02d", i)).tipo(bici).estadoOperativo(EstadoOperativo.DISPONIBLE).ubicacionActual(new Ubicacion(27, 14)).activo(true).build());
+
+        // Si se encontraron vehículos en el archivo de mantenimiento, se construye la flota oficial dinámicamente
+        if (!codigosEncontrados.isEmpty()) {
+            long id = 1;
+            for (String codigo : codigosEncontrados) {
+                TipoVehiculo tipo;
+                if (codigo.startsWith("TA")) tipo = auto;
+                else if (codigo.startsWith("TM")) tipo = moto;
+                else tipo = bici;
+
+                flota.add(UnidadTransporte.builder()
+                        .id(id++)
+                        .codigo(codigo)
+                        .tipo(tipo)
+                        .estadoOperativo(EstadoOperativo.DISPONIBLE)
+                        .ubicacionActual(new Ubicacion(27, 14))
+                        .activo(true)
+                        .build());
+            }
+            return flota;
         }
-        return flota;
+
+        // Fallback por defecto: 4 Autos, 3 Motos, 3 Bicis
+        return crearFlotaDinamica(null, 4, 3, 3);
     }
 
     private static void imprimirResultados(int totalPedidos,
@@ -205,18 +304,35 @@ public class BenchmarkMetaheuristicas {
                     ? r.getUnidadTransporte().getTipo().getNombre() : "N/A";
             int cargaTotal = r.getParadas().stream()
                     .mapToInt(p -> p.getPedido() != null ? p.getPedido().getCantidadUnidades() : 0).sum();
-            System.out.println(String.format("  [%s] Vehículo: %s (%s) | Paradas: %d | Carga: %d u. | Dist: %.1f km | Costo: S/ %.2f | Tiempo: %d min",
-                    r.getCodigo(), vehiculo, tipo, r.getParadas().size(), cargaTotal, r.getDistanciaTotalKm(), r.getCostoTotal(), r.getTiempoEstimadoMin()));
+            int capMax = (r.getUnidadTransporte() != null && r.getUnidadTransporte().getTipo() != null)
+                    ? r.getUnidadTransporte().getTipo().getCapacidadMaxima() : 0;
+            System.out.println(String.format("  [%s] Vehículo: %s (%s) | Paradas: %d | Carga: %d/%d u. | Dist: %.1f km | Costo: S/ %.2f | Tiempo: %d min",
+                    r.getCodigo(), vehiculo, tipo, r.getParadas().size(), cargaTotal, capMax, r.getDistanciaTotalKm(), r.getCostoTotal(), r.getTiempoEstimadoMin()));
 
+            Ubicacion origen = (r.getAlmacenOrigen() != null && r.getAlmacenOrigen().getUbicacion() != null)
+                    ? r.getAlmacenOrigen().getUbicacion() : new Ubicacion(27, 14);
+
+            LocalDateTime tSalida = r.getFechaHoraGeneracion() != null ? r.getFechaHoraGeneracion()
+                    : (!r.getParadas().isEmpty() && r.getParadas().get(0).getPedido() != null
+                    ? r.getParadas().get(0).getPedido().getFechaHoraRegistro() : LocalDateTime.of(2026, 9, 1, 0, 0));
+            LocalDateTime tRetorno = tSalida.plusMinutes(r.getTiempoEstimadoMin());
+
+            System.out.println(String.format("     -> [SALIDA]                   Almacén Central (%d,%d) | Hora Salida: %s",
+                    origen.getPosX(), origen.getPosY(), tSalida));
+
+            int idx = 1;
             for (ParadaRuta p : r.getParadas()) {
                 if (p.getPedido() != null) {
                     Ubicacion dest = p.getPedido().getDestino();
                     String coords = dest != null ? "(" + dest.getPosX() + "," + dest.getPosY() + ")" : "N/A";
-                    System.out.println(String.format("     -> Pedido: %s | Destino: %-9s | Cant: %2d u. | Plazo: %s | Estimada: %s",
-                            p.getPedido().getCodigo(), coords, p.getPedido().getCantidadUnidades(),
+                    System.out.println(String.format("     -> [ENTREGA %02d] Pedido: %-12s | Destino: %-9s | Cant: %2d u. | Plazo: %s | Llegada: %s",
+                            idx++, p.getPedido().getCodigo(), coords, p.getPedido().getCantidadUnidades(),
                             p.getPedido().getPlazoLimiteEntrega(), p.getHoraEstimadaLlegada()));
                 }
             }
+
+            System.out.println(String.format("     -> [RETORNO/REABASTECIMIENTO] Almacén Central (%d,%d) | Llegada Estimada: %s | Reabastecido y disponible",
+                    origen.getPosX(), origen.getPosY(), tRetorno));
         }
     }
 

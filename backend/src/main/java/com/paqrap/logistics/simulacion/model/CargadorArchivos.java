@@ -240,6 +240,51 @@ public class CargadorArchivos {
         return LocalDateTime.of(anio, mes, 1, 0, 0, 0);
     }
 
+    /**
+     * Parsea un archivo de mantenimiento preventivo (RF-42 / Pregunta 19 FAQ).
+     * Formato oficial: aaaammdd:TTNN (ej. 20260901:TA01)
+     * Retorna un mapa: Fecha -> Lista de códigos de vehículos en mantenimiento.
+     */
+    public java.util.Map<java.time.LocalDate, List<String>> cargarMantenimientosPreventivos(String rutaArchivo) {
+        java.util.Map<java.time.LocalDate, List<String>> mantMap = new java.util.HashMap<>();
+        if (!validarFormato(rutaArchivo)) {
+            log.warn("Archivo de mantenimiento preventivo no encontrado o inaccesible: {}", rutaArchivo);
+            return mantMap;
+        }
+
+        try (BufferedReader br = new BufferedReader(new FileReader(rutaArchivo))) {
+            String linea;
+            int numLinea = 0;
+            while ((linea = br.readLine()) != null) {
+                linea = linea.trim();
+                numLinea++;
+                if (linea.isEmpty() || linea.startsWith("#")) continue;
+
+                String[] partes = linea.split(":");
+                if (partes.length == 2) {
+                    String fechaStr = partes[0].trim();
+                    String codigoVehiculo = partes[1].trim();
+                    if (fechaStr.length() == 8) {
+                        try {
+                            int anio = Integer.parseInt(fechaStr.substring(0, 4));
+                            int mes = Integer.parseInt(fechaStr.substring(4, 6));
+                            int dia = Integer.parseInt(fechaStr.substring(6, 8));
+                            java.time.LocalDate fecha = java.time.LocalDate.of(anio, mes, dia);
+                            mantMap.computeIfAbsent(fecha, k -> new ArrayList<>()).add(codigoVehiculo);
+                        } catch (Exception ex) {
+                            log.warn("Línea {}: Formato de fecha inválido '{}'", numLinea, fechaStr);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error al leer archivo de mantenimiento preventivo: {}", e.getMessage());
+        }
+
+        log.info("Cargados registros de mantenimiento para {} días desde {}", mantMap.size(), rutaArchivo);
+        return mantMap;
+    }
+
     private TipoEntrega mapearTipoEntrega(int horas) {
         switch (horas) {
             case 4: return TipoEntrega.PRIORIZADA_4H;
