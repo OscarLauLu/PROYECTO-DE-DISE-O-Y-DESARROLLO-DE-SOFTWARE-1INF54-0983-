@@ -11,12 +11,7 @@ if [ "$1" = "benchmark" ] || [ "$1" = "bench" ]; then
     echo "================================================================================"
     exec java -jar /app/app.jar --benchmark --mes="$MES" --pedidos="$PEDIDOS"
 
-# Modo 2: Benchmark Python (interactivo / con detalle)
-elif [ "$1" = "python" ] || [ "$1" = "python-benchmark" ]; then
-    shift
-    exec python3 /app/probar_metaheuristicas.py "$@"
-
-# Modo 3: Shell interactivo
+# Modo 2: Shell interactivo
 elif [ "$1" = "sh" ] || [ "$1" = "bash" ]; then
     exec "$@"
 

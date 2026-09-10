@@ -40,14 +40,6 @@ docker compose up -d app
 
 ---
 
-### C. Ejecutar el Benchmark con desglose detallado de paradas (Python)
-Si deseas ver la lista detallada de paradas de cada vehículo con horas de llegada y cumplimiento:
-```bash
-docker compose run --rm benchmark python --mes 202601 --pedidos 25 --algoritmo ambos --detalle
-```
-
----
-
 ## 3. Ejecución Directa con Docker (sin Compose)
 
 ### Construir la imagen:

@@ -23,18 +23,17 @@ LABEL description="Sistema Logístico PaqRap - Benchmark y API de Algoritmos Met
 
 WORKDIR /app
 
-# Instalar bash y python3 para máxima versatilidad
-RUN apk add --no-cache bash python3
+# Instalar bash para scripts de inicio
+RUN apk add --no-cache bash
 
 # Copiar el ejecutable compilado
 COPY --from=builder /build/target/logistics-backend-*.jar /app/app.jar
 
 # Copiar carpeta de datos y scripts de benchmark
 COPY datos /app/datos
-COPY probar_metaheuristicas.py /app/probar_metaheuristicas.py
 COPY entrypoint.sh /app/entrypoint.sh
 
-RUN chmod +x /app/entrypoint.sh /app/probar_metaheuristicas.py
+RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 8080
 
