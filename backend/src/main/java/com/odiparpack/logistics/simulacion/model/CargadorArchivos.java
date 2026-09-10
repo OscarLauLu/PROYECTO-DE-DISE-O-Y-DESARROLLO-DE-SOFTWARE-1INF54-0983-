@@ -54,6 +54,15 @@ public class CargadorArchivos {
             return pedidos;
         }
 
+        int anio = 2026;
+        int mes = 9;
+        String nombreArchivo = new File(rutaArchivo).getName();
+        Matcher mAnioMes = Pattern.compile("(\\d{4})(\\d{2})").matcher(nombreArchivo);
+        if (mAnioMes.find()) {
+            anio = Integer.parseInt(mAnioMes.group(1));
+            mes = Integer.parseInt(mAnioMes.group(2));
+        }
+
         try (BufferedReader br = new BufferedReader(new FileReader(rutaArchivo))) {
             String linea;
             int numLinea = 0;
@@ -62,7 +71,15 @@ public class CargadorArchivos {
                 numLinea++;
                 if (linea.isEmpty() || linea.startsWith("#")) continue;
 
-                String[] partes = linea.split(",");
+                // Soporta formato ##d##h##m,x,y,... y formato ##d##h##m:x,y,...
+                String lineaNormalizada = linea;
+                int idxColon = linea.indexOf(':');
+                int idxComma = linea.indexOf(',');
+                if (idxColon != -1 && (idxComma == -1 || idxColon < idxComma)) {
+                    lineaNormalizada = linea.substring(0, idxColon) + "," + linea.substring(idxColon + 1);
+                }
+
+                String[] partes = lineaNormalizada.split(",");
                 if (partes.length >= 6) {
                     try {
                         String timeStr = partes[0].trim();
@@ -72,7 +89,7 @@ public class CargadorArchivos {
                         int cantidad = Integer.parseInt(partes[4].trim());
                         int horasLimite = Integer.parseInt(partes[5].trim());
 
-                        LocalDateTime regTime = parsearFechaSimulada(timeStr, 2026, 9);
+                        LocalDateTime regTime = parsearFechaSimulada(timeStr, anio, mes);
                         TipoEntrega tipo = mapearTipoEntrega(horasLimite);
 
                         Cliente cliente = Cliente.builder()
@@ -82,6 +99,7 @@ public class CargadorArchivos {
                                 .build();
 
                         Pedido pedido = Pedido.builder()
+                                .id((long) numLinea)
                                 .codigo("PED-" + numLinea + "-" + UUID.randomUUID().toString().substring(0, 6))
                                 .cantidadUnidades(cantidad)
                                 .fechaHoraRegistro(regTime)
@@ -116,6 +134,21 @@ public class CargadorArchivos {
             return bloqueos;
         }
 
+        int anio = 2026;
+        int mes = 9;
+        String nombreArchivo = new File(rutaArchivo).getName();
+        Matcher mAnioMes = Pattern.compile("(\\d{4})(\\d{2})").matcher(nombreArchivo);
+        if (mAnioMes.find()) {
+            anio = Integer.parseInt(mAnioMes.group(1));
+            mes = Integer.parseInt(mAnioMes.group(2));
+        } else {
+            Matcher mCorto = Pattern.compile("(\\d{2})(\\d{2})").matcher(nombreArchivo);
+            if (mCorto.find()) {
+                anio = 2000 + Integer.parseInt(mCorto.group(1));
+                mes = Integer.parseInt(mCorto.group(2));
+            }
+        }
+
         try (BufferedReader br = new BufferedReader(new FileReader(rutaArchivo))) {
             String linea;
             int numLinea = 0;
@@ -132,10 +165,11 @@ public class CargadorArchivos {
 
                     String[] tiempos = ventanaTiempo.split("-");
                     if (tiempos.length == 2) {
-                        LocalDateTime inicio = parsearFechaSimulada(tiempos[0].trim(), 2026, 9);
-                        LocalDateTime fin = parsearFechaSimulada(tiempos[1].trim(), 2026, 9);
+                        LocalDateTime inicio = parsearFechaSimulada(tiempos[0].trim(), anio, mes);
+                        LocalDateTime fin = parsearFechaSimulada(tiempos[1].trim(), anio, mes);
 
                         Bloqueo b = Bloqueo.builder()
+                                .id((long) numLinea)
                                 .codigo("BLOQ-" + numLinea + "-" + UUID.randomUUID().toString().substring(0, 6))
                                 .fechaHoraInicio(inicio)
                                 .fechaHoraFin(fin)

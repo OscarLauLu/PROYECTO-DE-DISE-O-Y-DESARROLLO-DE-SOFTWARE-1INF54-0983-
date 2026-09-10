@@ -55,7 +55,9 @@ public class RandomRemovalOperator extends DestroyOperator {
 
     private void removerPedidoDeSolucion(PlanSolution solucion, Pedido pedido) {
         for (Ruta r : solucion.getRutas()) {
-            boolean removed = r.getParadas().removeIf(p -> p.getPedido() != null && p.getPedido().getId().equals(pedido.getId()));
+            boolean removed = r.getParadas().removeIf(p -> p.getPedido() != null &&
+                    (java.util.Objects.equals(p.getPedido().getCodigo(), pedido.getCodigo()) ||
+                     (p.getPedido().getId() != null && p.getPedido().getId().equals(pedido.getId()))));
             if (removed) break;
         }
     }

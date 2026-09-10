@@ -208,14 +208,7 @@ public class RedVial {
                 int y1 = Integer.parseInt(coords[i + 1].trim());
                 int x2 = Integer.parseInt(coords[i + 2].trim());
                 int y2 = Integer.parseInt(coords[i + 3].trim());
-                String clave = obtenerClaveCanonica(x1, y1, x2, y2);
-                Tramo tramo = tramos.get(clave);
-                if (tramo != null) {
-                    tramo.setBloqueado(true);
-                    tramo.setInicioBloqueo(bloqueo.getFechaHoraInicio());
-                    tramo.setFinBloqueo(bloqueo.getFechaHoraFin());
-                    tramosBloqueadosActivos.add(clave);
-                }
+                procesarBloqueoSegmento(x1, y1, x2, y2, true, bloqueo.getFechaHoraInicio(), bloqueo.getFechaHoraFin());
             } catch (Exception e) {
                 log.error("Error al parsear coordenadas de bloqueo: {}", e.getMessage());
             }
@@ -231,14 +224,48 @@ public class RedVial {
                 int y1 = Integer.parseInt(coords[i + 1].trim());
                 int x2 = Integer.parseInt(coords[i + 2].trim());
                 int y2 = Integer.parseInt(coords[i + 3].trim());
-                String clave = obtenerClaveCanonica(x1, y1, x2, y2);
-                Tramo tramo = tramos.get(clave);
-                if (tramo != null) {
-                    tramo.setBloqueado(false);
-                    tramosBloqueadosActivos.remove(clave);
-                }
+                procesarBloqueoSegmento(x1, y1, x2, y2, false, null, null);
             } catch (Exception e) {
                 log.error("Error al remover tramo bloqueado: {}", e.getMessage());
+            }
+        }
+    }
+
+    private void procesarBloqueoSegmento(int x1, int y1, int x2, int y2, boolean bloquear, LocalDateTime inicio, LocalDateTime fin) {
+        int stepX = Integer.compare(x2, x1);
+        int stepY = Integer.compare(y2, y1);
+
+        if (x1 == x2 && y1 == y2) {
+            return;
+        }
+
+        int cx = x1;
+        int cy = y1;
+
+        while (cx != x2) {
+            int nx = cx + stepX;
+            String clave = obtenerClaveCanonica(cx, cy, nx, cy);
+            actualizarEstadoTramo(clave, bloquear, inicio, fin);
+            cx = nx;
+        }
+        while (cy != y2) {
+            int ny = cy + stepY;
+            String clave = obtenerClaveCanonica(cx, cy, cx, ny);
+            actualizarEstadoTramo(clave, bloquear, inicio, fin);
+            cy = ny;
+        }
+    }
+
+    private void actualizarEstadoTramo(String clave, boolean bloquear, LocalDateTime inicio, LocalDateTime fin) {
+        Tramo tramo = tramos.get(clave);
+        if (tramo != null) {
+            tramo.setBloqueado(bloquear);
+            if (bloquear) {
+                tramo.setInicioBloqueo(inicio);
+                tramo.setFinBloqueo(fin);
+                tramosBloqueadosActivos.add(clave);
+            } else {
+                tramosBloqueadosActivos.remove(clave);
             }
         }
     }

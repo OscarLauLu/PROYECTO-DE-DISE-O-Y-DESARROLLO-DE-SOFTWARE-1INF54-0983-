@@ -128,7 +128,9 @@ public class HolguraGreedyRepairOperator extends RepairOperator {
         for (UnidadTransporte u : flota) {
             if (!u.isActivo() || u.getEstadoOperativo() == EstadoOperativo.AVERIADA) continue;
             boolean yaTieneRuta = solucion.getRutas().stream()
-                    .anyMatch(r -> r.getUnidadTransporte() != null && r.getUnidadTransporte().getId().equals(u.getId()));
+                    .anyMatch(r -> r.getUnidadTransporte() != null &&
+                            (java.util.Objects.equals(r.getUnidadTransporte().getCodigo(), u.getCodigo()) ||
+                             (r.getUnidadTransporte().getId() != null && r.getUnidadTransporte().getId().equals(u.getId()))));
 
             if (!yaTieneRuta) {
                 int cap = (u.getTipo() != null) ? u.getTipo().getCapacidadMaxima() : 24;

@@ -1,6 +1,8 @@
 package com.odiparpack.logistics.planificacion.algoritmo;
 
 import com.odiparpack.logistics.almacen.model.Almacen;
+import com.odiparpack.logistics.almacen.model.AlmacenCentral;
+import com.odiparpack.logistics.almacen.model.AlmacenIntermedio;
 import com.odiparpack.logistics.almacen.repository.AlmacenRepository;
 import com.odiparpack.logistics.flota.model.UnidadTransporte;
 import com.odiparpack.logistics.pedidos.model.Pedido;
@@ -16,6 +18,7 @@ import com.odiparpack.logistics.planificacion.algoritmo.alns.RandomRemovalOperat
 import com.odiparpack.logistics.planificacion.algoritmo.alns.RepairOperator;
 import com.odiparpack.logistics.planificacion.model.Ruta;
 import com.odiparpack.logistics.redvial.model.RedVial;
+import com.odiparpack.logistics.redvial.model.Ubicacion;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -52,6 +55,10 @@ public class AlgoritmoALNS implements AlgoritmoRuteo {
     private PlanSolution mejor;
     private double costoUltimaSolucion = 0.0;
 
+    public AlgoritmoALNS() {
+        this.almacenRepository = null;
+    }
+
     public AlgoritmoALNS(AlmacenRepository almacenRepository) {
         this.almacenRepository = almacenRepository;
     }
@@ -84,6 +91,9 @@ public class AlgoritmoALNS implements AlgoritmoRuteo {
         log.info("Ejecutando {} con {} pedidos y {} unidades...", obtenerNombre(), pedidos.size(), flota.size());
 
         List<Almacen> almacenes = (almacenRepository != null) ? almacenRepository.findAll() : new ArrayList<>();
+        if (almacenes.isEmpty()) {
+            almacenes = crearAlmacenesPorDefecto();
+        }
         LocalDateTime tiempoInicio = LocalDateTime.now();
 
         // 1. Solución inicial constructiva
@@ -175,5 +185,38 @@ public class AlgoritmoALNS implements AlgoritmoRuteo {
         double lambda = 0.3;
         for (PonderableOperator op : destructores) op.actualizarPeso(lambda);
         for (PonderableOperator op : reparadores) op.actualizarPeso(lambda);
+    }
+
+    private List<Almacen> crearAlmacenesPorDefecto() {
+        List<Almacen> lista = new ArrayList<>();
+        AlmacenCentral central = new AlmacenCentral();
+        central.setId(1L);
+        central.setCodigo("ALM-CEN-01");
+        central.setNombre("Almacén Central");
+        central.setUbicacion(new Ubicacion(35, 25));
+        central.setStockActual(999999);
+        lista.add(central);
+
+        AlmacenIntermedio int1 = new AlmacenIntermedio();
+        int1.setId(2L);
+        int1.setCodigo("ALM-INT-01");
+        int1.setNombre("Almacén Intermedio Norte");
+        int1.setUbicacion(new Ubicacion(15, 15));
+        int1.setStockActual(1000);
+        int1.setCapacidadMaxima(1000);
+        int1.setUmbralAlertaOcupacion(90.0);
+        lista.add(int1);
+
+        AlmacenIntermedio int2 = new AlmacenIntermedio();
+        int2.setId(3L);
+        int2.setCodigo("ALM-INT-02");
+        int2.setNombre("Almacén Intermedio Sur");
+        int2.setUbicacion(new Ubicacion(55, 35));
+        int2.setStockActual(1000);
+        int2.setCapacidadMaxima(1000);
+        int2.setUmbralAlertaOcupacion(90.0);
+        lista.add(int2);
+
+        return lista;
     }
 }
