@@ -250,4 +250,117 @@ public class RedVial {
             return x2 + "," + y2 + "-" + x1 + "," + y1;
         }
     }
+
+    /**
+     * Calcula la distancia más corta (en km) entre dos nodos considerando tramos bloqueados (RF-12).
+     * Retorna Double.MAX_VALUE si el destino no es alcanzable debido a bloqueos viales.
+     */
+    public double distanciaMinima(Nodo origen, Nodo destino, LocalDateTime instante) {
+        if (origen == null || destino == null) return Double.MAX_VALUE;
+        if (origen.equals(destino)) return 0.0;
+        if (tramosBloqueadosActivos.isEmpty()) {
+            return calcularDistancia(origen, destino);
+        }
+
+        Queue<Nodo> cola = new ArrayDeque<>();
+        Map<Nodo, Integer> dist = new HashMap<>();
+        cola.add(origen);
+        dist.put(origen, 0);
+        int[][] direcciones = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+
+        while (!cola.isEmpty()) {
+            Nodo actual = cola.poll();
+            int d = dist.get(actual);
+            if (actual.equals(destino)) {
+                return (double) d;
+            }
+
+            for (int[] dir : direcciones) {
+                int nx = actual.getX() + dir[0];
+                int ny = actual.getY() + dir[1];
+                if (nx >= 0 && nx <= anchoKm && ny >= 0 && ny <= altoKm) {
+                    Nodo vecino = mallaNodos[nx][ny];
+                    if (!dist.containsKey(vecino)) {
+                        String claveTramo = obtenerClaveCanonica(actual.getX(), actual.getY(), nx, ny);
+                        Tramo tramo = tramos.get(claveTramo);
+                        if (tramo != null && !estaBloqueado(tramo, instante)) {
+                            dist.put(vecino, d + 1);
+                            cola.add(vecino);
+                        }
+                    }
+                }
+            }
+        }
+        return Double.MAX_VALUE;
+    }
+
+    public double distanciaMinima(Ubicacion origen, Ubicacion destino, LocalDateTime instante) {
+        if (origen == null || destino == null) return Double.MAX_VALUE;
+        Nodo n1 = obtenerNodo(origen.getPosX(), origen.getPosY());
+        Nodo n2 = obtenerNodo(destino.getPosX(), destino.getPosY());
+        return distanciaMinima(n1, n2, instante);
+    }
+
+    /**
+     * Obtiene la lista ordenada de nodos en el camino mínimo libre de bloqueos viales.
+     */
+    public List<Nodo> caminoMinimoNodos(Nodo origen, Nodo destino, LocalDateTime instante) {
+        if (origen == null || destino == null) return Collections.emptyList();
+        if (origen.equals(destino)) return Collections.singletonList(origen);
+
+        Queue<Nodo> cola = new ArrayDeque<>();
+        Map<Nodo, Nodo> padre = new HashMap<>();
+        Set<Nodo> visitados = new HashSet<>();
+        cola.add(origen);
+        visitados.add(origen);
+
+        boolean encontrado = false;
+        int[][] direcciones = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+
+        while (!cola.isEmpty()) {
+            Nodo actual = cola.poll();
+            if (actual.equals(destino)) {
+                encontrado = true;
+                break;
+            }
+
+            for (int[] dir : direcciones) {
+                int nx = actual.getX() + dir[0];
+                int ny = actual.getY() + dir[1];
+                if (nx >= 0 && nx <= anchoKm && ny >= 0 && ny <= altoKm) {
+                    Nodo vecino = mallaNodos[nx][ny];
+                    if (!visitados.contains(vecino)) {
+                        String claveTramo = obtenerClaveCanonica(actual.getX(), actual.getY(), nx, ny);
+                        Tramo tramo = tramos.get(claveTramo);
+                        if (tramo != null && !estaBloqueado(tramo, instante)) {
+                            visitados.add(vecino);
+                            padre.put(vecino, actual);
+                            cola.add(vecino);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!encontrado) {
+            return Collections.emptyList();
+        }
+
+        List<Nodo> camino = new ArrayList<>();
+        Nodo paso = destino;
+        while (!paso.equals(origen)) {
+            camino.add(0, paso);
+            paso = padre.get(paso);
+        }
+        camino.add(0, origen);
+        return camino;
+    }
+
+    public List<Nodo> caminoMinimoNodos(Ubicacion origen, Ubicacion destino, LocalDateTime instante) {
+        if (origen == null || destino == null) return Collections.emptyList();
+        Nodo n1 = obtenerNodo(origen.getPosX(), origen.getPosY());
+        Nodo n2 = obtenerNodo(destino.getPosX(), destino.getPosY());
+        return caminoMinimoNodos(n1, n2, instante);
+    }
 }
+

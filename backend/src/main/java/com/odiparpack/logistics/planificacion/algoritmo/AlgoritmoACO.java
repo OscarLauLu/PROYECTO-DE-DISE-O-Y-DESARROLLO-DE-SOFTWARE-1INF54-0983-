@@ -2,6 +2,8 @@ package com.odiparpack.logistics.planificacion.algoritmo;
 
 import com.odiparpack.logistics.flota.model.UnidadTransporte;
 import com.odiparpack.logistics.pedidos.model.Pedido;
+import com.odiparpack.logistics.planificacion.algoritmo.aco.ConfigACO;
+import com.odiparpack.logistics.planificacion.algoritmo.aco.Hormiga;
 import com.odiparpack.logistics.planificacion.model.ParadaRuta;
 import com.odiparpack.logistics.planificacion.model.Ruta;
 import com.odiparpack.logistics.redvial.model.Nodo;
@@ -12,15 +14,23 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Metaheurístico de Optimización por Colonia de Hormigas (Ant Colony Optimization - ACO)
- * para el problema de ruteo de vehículos sobre la retícula de 70x50 km.
+ * Optimización por Colonia de Hormigas (ACO) para la construcción de rutas vehiculares multi-parada (RF-06).
+ * Cada hormiga decide parada a parada el próximo pedido a atender respetando:
+ * - Capacidad máxima del vehículo (Q_k, RF-07).
+ * - Plazo comprometido de cada pedido y ventanas de tiempo (RF-08).
+ * - Tramos bloqueados en la retícula vial (RF-12) calculados mediante camino mínimo.
+ * - Tiempo de servicio de 60 minutos por entrega (RF-09).
  */
 @Slf4j
 @Getter
@@ -28,13 +38,10 @@ import java.util.UUID;
 @Component("algoritmoACO")
 public class AlgoritmoACO implements AlgoritmoRuteo {
 
-    private int numHormigas = 20;
-    private double alfa = 1.0;          // Peso de la feromona
-    private double beta = 2.0;          // Peso de la heurística de visibilidad (inversa de distancia)
-    private double rhoEvaporacion = 0.1;// Tasa de evaporación
-    private int numIteraciones = 50;
+    private ConfigACO config = new ConfigACO();
+    private final Map<String, Map<String, Double>> pheromone = new ConcurrentHashMap<>();
+    private final Random random = new Random();
 
-    private double[][] matrizFeromonas;
     private double costoUltimaSolucion = 0.0;
 
     @Override
@@ -50,11 +57,20 @@ public class AlgoritmoACO implements AlgoritmoRuteo {
     @Override
     public void configurarParametros(Map<String, Double> params) {
         if (params == null) return;
-        if (params.containsKey("numHormigas")) this.numHormigas = params.get("numHormigas").intValue();
-        if (params.containsKey("alfa")) this.alfa = params.get("alfa");
-        if (params.containsKey("beta")) this.beta = params.get("beta");
-        if (params.containsKey("rhoEvaporacion")) this.rhoEvaporacion = params.get("rhoEvaporacion");
-        if (params.containsKey("numIteraciones")) this.numIteraciones = params.get("numIteraciones").intValue();
+        if (params.containsKey("numHormigas")) {
+            config.setMinAnts(params.get("numHormigas").intValue());
+            config.setMaxAnts(Math.max(config.getMaxAnts(), params.get("numHormigas").intValue()));
+        }
+        if (params.containsKey("minAnts")) config.setMinAnts(params.get("minAnts").intValue());
+        if (params.containsKey("maxAnts")) config.setMaxAnts(params.get("maxAnts").intValue());
+        if (params.containsKey("numIteraciones")) config.setIterations(params.get("numIteraciones").intValue());
+        if (params.containsKey("iteraciones")) config.setIterations(params.get("iteraciones").intValue());
+        if (params.containsKey("alfa")) config.setAlpha(params.get("alfa"));
+        if (params.containsKey("alpha")) config.setAlpha(params.get("alpha"));
+        if (params.containsKey("beta")) config.setBeta(params.get("beta"));
+        if (params.containsKey("rhoEvaporacion")) config.setRho(params.get("rhoEvaporacion"));
+        if (params.containsKey("rho")) config.setRho(params.get("rho"));
+        if (params.containsKey("umbralCriticidadMin")) config.setUmbralCriticidadMin(params.get("umbralCriticidadMin"));
     }
 
     @Override
@@ -63,91 +79,238 @@ public class AlgoritmoACO implements AlgoritmoRuteo {
             return new ArrayList<>();
         }
 
-        log.info("Ejecutando {} con {} pedidos y {} unidades...", obtenerNombre(), pedidos.size(), flota.size());
-        List<Ruta> mejorSolucion = new ArrayList<>();
-        double mejorCosto = Double.MAX_VALUE;
+        log.info("Ejecutando {} con {} pedidos y {} unidades disponibles...",
+                obtenerNombre(), pedidos.size(), flota.size());
 
-        // Asignación voraz/heurística basada en feromonas y capacidades
-        int indiceVehiculo = 0;
-        Ruta rutaActual = null;
-        UnidadTransporte vehiculoActual = null;
-        Ubicacion ubicacionActual = null;
-        LocalDateTime tiempoSimulado = LocalDateTime.now();
+        LocalDateTime horaSimulada = LocalDateTime.now();
+        List<Pedido> pedidosPendientes = new ArrayList<>(pedidos);
+        List<Ruta> rutasGeneradas = new ArrayList<>();
+        double costoTotalGlobal = 0.0;
 
-        for (Pedido pedido : pedidos) {
-            if (vehiculoActual == null || rutaActual == null || !vehiculoActual.puedeAtender(pedido)) {
-                // Siguiente vehículo con capacidad
-                if (indiceVehiculo < flota.size()) {
-                    vehiculoActual = flota.get(indiceVehiculo++);
-                    ubicacionActual = vehiculoActual.getUbicacionActual() != null
-                            ? vehiculoActual.getUbicacionActual() : new Ubicacion(35, 25);
+        for (UnidadTransporte vehiculo : flota) {
+            if (pedidosPendientes.isEmpty()) break;
+            if (!vehiculo.isActivo()) continue;
 
-                    rutaActual = Ruta.builder()
-                            .codigo("RUT-" + UUID.randomUUID().toString().substring(0, 8))
-                            .unidadTransporte(vehiculoActual)
-                            .fechaHoraGeneracion(tiempoSimulado)
-                            .paradas(new ArrayList<>())
-                            .distanciaTotalKm(0.0)
-                            .build();
-                    mejorSolucion.add(rutaActual);
-                } else {
-                    log.warn("Capacidad de flota agotada para atender pedido {}", pedido.getCodigo());
-                    continue;
-                }
+            Ubicacion ubicacionVehiculo = vehiculo.getUbicacionActual() != null
+                    ? vehiculo.getUbicacionActual() : new Ubicacion(35, 25);
+            Nodo nodoOrigen = red.obtenerNodo(ubicacionVehiculo.getPosX(), ubicacionVehiculo.getPosY());
+            if (nodoOrigen == null) {
+                nodoOrigen = new Nodo(35, 25);
             }
 
-            // Calcular distancia Manhattan
-            Ubicacion dest = pedido.getDestino() != null ? pedido.getDestino() : new Ubicacion(35, 25);
-            double distKm = ubicacionActual.distanciaOrtogonalA(dest);
+            // Construir la mejor ruta para este vehículo usando ACO
+            Ruta rutaVehiculo = runAcoParaVehiculo(vehiculo, nodoOrigen, pedidosPendientes, red, horaSimulada);
+            if (rutaVehiculo != null && !rutaVehiculo.getParadas().isEmpty()) {
+                rutasGeneradas.add(rutaVehiculo);
+                costoTotalGlobal += rutaVehiculo.getCostoTotal();
 
-            // Calcular tiempo de traslado
-            double vel = vehiculoActual.getTipo() != null ? vehiculoActual.getTipo().getVelocidadPromedioKmH() : 40.0;
-            int minutosTransito = (int) Math.ceil((distKm / vel) * 60.0);
-            tiempoSimulado = tiempoSimulado.plusMinutes(minutosTransito);
+                // Remover pedidos atendidos por esta unidad
+                for (ParadaRuta parada : rutaVehiculo.getParadas()) {
+                    pedidosPendientes.remove(parada.getPedido());
+                }
 
+                // Actualizar carga del vehículo
+                int cargaRuta = rutaVehiculo.getParadas().stream()
+                        .mapToInt(p -> p.getPedido() != null ? p.getPedido().getCantidadUnidades() : 0)
+                        .sum();
+                vehiculo.setCargaActual(cargaRuta);
+            }
+        }
+
+        this.costoUltimaSolucion = Math.round(costoTotalGlobal * 100.0) / 100.0;
+        log.info("ACO completado: {} rutas construidas con costo total S/ {}", rutasGeneradas.size(), costoUltimaSolucion);
+        return rutasGeneradas;
+    }
+
+    /**
+     * Optimiza y construye la mejor ruta multi-parada para UN vehículo a partir de pedidos pendientes.
+     */
+    public Ruta runAcoParaVehiculo(UnidadTransporte vehiculo, Nodo origen, List<Pedido> pedidosPendientes,
+                                   RedVial red, LocalDateTime horaInicio) {
+        int pedidosCriticos = (int) pedidosPendientes.stream()
+                .filter(o -> {
+                    Duration h = o.calcularHolgura(horaInicio);
+                    return h.toMinutes() <= config.getUmbralCriticidadMin();
+                })
+                .count();
+
+        int m = Math.min(config.getMaxAnts(), Math.max(config.getMinAnts(), Math.max(1, pedidosCriticos)));
+
+        Hormiga mejorGlobal = null;
+        for (int it = 0; it < config.getIterations(); it++) {
+            Hormiga mejorIteracion = null;
+            for (int k = 0; k < m; k++) {
+                Hormiga ant = new Hormiga();
+                construirRuta(ant, vehiculo, origen, pedidosPendientes, red, horaInicio);
+                if (ant.cumpleTodosLosPlazos() && esMejor(ant, mejorIteracion)) {
+                    mejorIteracion = ant;
+                }
+            }
+            evaporar();
+            if (mejorIteracion != null) {
+                reforzar(origen, mejorIteracion, red);
+            }
+            if (esMejor(mejorIteracion, mejorGlobal)) {
+                mejorGlobal = mejorIteracion;
+            }
+        }
+
+        return construirRouteDesdeHormiga(vehiculo, mejorGlobal, horaInicio);
+    }
+
+    private void construirRuta(Hormiga ant, UnidadTransporte vehiculo, Nodo origen, List<Pedido> pedidosPendientes,
+                               RedVial red, LocalDateTime horaInicio) {
+        Nodo current = origen;
+        LocalDateTime tiempo = horaInicio;
+        double velocidadKmH = (vehiculo.getTipo() != null && vehiculo.getTipo().getVelocidadPromedioKmH() > 0)
+                ? vehiculo.getTipo().getVelocidadPromedioKmH() : 40.0;
+        int capacidadMax = (vehiculo.getTipo() != null) ? vehiculo.getTipo().getCapacidadMaxima() : 24;
+        double costoKm = (vehiculo.getTipo() != null) ? vehiculo.getTipo().getCostoPorKm() : 8.0;
+
+        while (true) {
+            List<Pedido> candidatos = new ArrayList<>();
+            Map<Pedido, Double> distancias = new HashMap<>();
+            Map<Pedido, LocalDateTime> llegadas = new HashMap<>();
+
+            for (Pedido o : pedidosPendientes) {
+                if (ant.yaAtendio(o)) continue;
+                if (ant.getCargaAcumulada() + o.getCantidadUnidades() > capacidadMax) continue;
+
+                Ubicacion dest = o.getDestino() != null ? o.getDestino() : new Ubicacion(35, 25);
+                Nodo nodoCliente = red.obtenerNodo(dest.getPosX(), dest.getPosY());
+                if (nodoCliente == null) continue;
+
+                double d = red.distanciaMinima(current, nodoCliente, tiempo);
+                if (d == Double.MAX_VALUE) continue; // sin camino libre por bloqueos viales (RF-12)
+
+                double tiempoViajeHoras = d / velocidadKmH;
+                long minutosViaje = (long) Math.ceil(tiempoViajeHoras * 60.0);
+                LocalDateTime llegada = tiempo.plusMinutes(minutosViaje);
+
+                if (o.getPlazoLimiteEntrega() != null && llegada.isAfter(o.getPlazoLimiteEntrega())) {
+                    continue; // ya no cumpliría el plazo comprometido (RF-08)
+                }
+
+                candidatos.add(o);
+                distancias.put(o, d);
+                llegadas.put(o, llegada);
+            }
+
+            if (candidatos.isEmpty()) break;
+
+            Pedido elegido = seleccionarSiguientePedido(current, costoKm, candidatos, distancias, llegadas, red);
+            double d = distancias.get(elegido);
+            double costoTramo = d * costoKm;
+            LocalDateTime llegada = llegadas.get(elegido);
+
+            Ubicacion destElegido = elegido.getDestino() != null ? elegido.getDestino() : new Ubicacion(35, 25);
+            Nodo nodoElegido = red.obtenerNodo(destElegido.getPosX(), destElegido.getPosY());
+
+            ant.getPedidosAtendidos().add(elegido);
+            ant.getVisitados().add(elegido);
+            ant.getHoraLlegada().put(elegido, llegada);
+            ant.getTramoHaciaPedido().put(elegido, red.caminoMinimoNodos(current, nodoElegido, tiempo));
+            ant.setCargaAcumulada(ant.getCargaAcumulada() + elegido.getCantidadUnidades());
+            ant.setCostoAcumulado(ant.getCostoAcumulado() + costoTramo);
+            ant.setDistanciaAcumuladaKm(ant.getDistanciaAcumuladaKm() + d);
+
+            current = nodoElegido;
+            tiempo = llegada.plusMinutes(60); // 60 min de servicio impactan paradas posteriores (RF-09)
+        }
+        ant.setTiempoAcumuladoMin((int) Duration.between(horaInicio, tiempo).toMinutes());
+    }
+
+    private Pedido seleccionarSiguientePedido(Nodo current, double costoPorKm, List<Pedido> candidatos,
+                                              Map<Pedido, Double> distancias, Map<Pedido, LocalDateTime> llegadas,
+                                              RedVial red) {
+        double suma = 0.0;
+        Map<Pedido, Double> valores = new HashMap<>();
+
+        for (Pedido o : candidatos) {
+            LocalDateTime llegada = llegadas.get(o);
+            long holguraMin = (o.getPlazoLimiteEntrega() != null)
+                    ? Duration.between(llegada, o.getPlazoLimiteEntrega()).toMinutes() : 600;
+            double holguraRestante = Math.max(1.0, (double) holguraMin);
+            double urgencia = 1.0 / holguraRestante;
+            double costoTramo = distancias.get(o) * costoPorKm;
+            double heuristica = urgencia / (costoTramo + 1.0);
+
+            Ubicacion dest = o.getDestino() != null ? o.getDestino() : new Ubicacion(35, 25);
+            Nodo nodoCliente = red.obtenerNodo(dest.getPosX(), dest.getPosY());
+            double feromona = getPheromone(current, nodoCliente);
+
+            double valor = Math.pow(feromona, config.getAlpha()) * Math.pow(heuristica, config.getBeta());
+            valores.put(o, valor);
+            suma += valor;
+        }
+
+        if (suma <= 0.0) return candidatos.get(random.nextInt(candidatos.size()));
+        double rand = random.nextDouble() * suma;
+        double acc = 0.0;
+        for (Pedido o : candidatos) {
+            acc += valores.get(o);
+            if (acc >= rand) return o;
+        }
+        return candidatos.get(candidatos.size() - 1);
+    }
+
+    private void evaporar() {
+        for (Map<String, Double> fila : pheromone.values()) {
+            fila.replaceAll((k, v) -> Math.max(0.001, v * (1.0 - config.getRho())));
+        }
+    }
+
+    private void reforzar(Nodo origenNode, Hormiga ant, RedVial red) {
+        Nodo current = origenNode;
+        double deposito = 1.0 / (ant.getCostoAcumulado() + 1.0);
+        for (Pedido o : ant.getPedidosAtendidos()) {
+            Ubicacion dest = o.getDestino() != null ? o.getDestino() : new Ubicacion(35, 25);
+            Nodo nodoCliente = red.obtenerNodo(dest.getPosX(), dest.getPosY());
+            addPheromone(current, nodoCliente, deposito);
+            current = nodoCliente;
+        }
+    }
+
+    private double getPheromone(Nodo a, Nodo b) {
+        if (a == null || b == null) return 1.0;
+        return pheromone.computeIfAbsent(a.getClave(), k -> new ConcurrentHashMap<>()).getOrDefault(b.getClave(), 1.0);
+    }
+
+    private void addPheromone(Nodo a, Nodo b, double delta) {
+        if (a == null || b == null) return;
+        pheromone.computeIfAbsent(a.getClave(), k -> new ConcurrentHashMap<>()).merge(b.getClave(), delta, Double::sum);
+    }
+
+    private boolean esMejor(Hormiga candidata, Hormiga actual) {
+        if (candidata == null) return false;
+        if (actual == null) return true;
+        if (candidata.getPedidosAtendidos().size() != actual.getPedidosAtendidos().size()) {
+            return candidata.getPedidosAtendidos().size() > actual.getPedidosAtendidos().size();
+        }
+        return candidata.getCostoAcumulado() < actual.getCostoAcumulado();
+    }
+
+    private Ruta construirRouteDesdeHormiga(UnidadTransporte vehiculo, Hormiga ant, LocalDateTime horaInicio) {
+        if (ant == null || ant.getPedidosAtendidos().isEmpty()) return null;
+
+        Ruta ruta = Ruta.builder()
+                .codigo("RUT-" + UUID.randomUUID().toString().substring(0, 8))
+                .unidadTransporte(vehiculo)
+                .fechaHoraGeneracion(horaInicio)
+                .distanciaTotalKm(Math.round(ant.getDistanciaAcumuladaKm() * 100.0) / 100.0)
+                .tiempoEstimadoMin(ant.getTiempoAcumuladoMin())
+                .costoTotal(Math.round(ant.getCostoAcumulado() * 100.0) / 100.0)
+                .paradas(new ArrayList<>())
+                .build();
+
+        for (Pedido o : ant.getPedidosAtendidos()) {
             ParadaRuta parada = ParadaRuta.builder()
-                    .pedido(pedido)
-                    .horaEstimadaLlegada(tiempoSimulado)
+                    .pedido(o)
+                    .horaEstimadaLlegada(ant.getHoraLlegada().get(o))
                     .tiempoServicioMin(60)
                     .build();
-            rutaActual.agregarParada(parada);
-
-            // Sumar 60 min de servicio
-            tiempoSimulado = tiempoSimulado.plusMinutes(60);
-
-            rutaActual.setDistanciaTotalKm(rutaActual.getDistanciaTotalKm() + distKm);
-            vehiculoActual.setCargaActual(vehiculoActual.getCargaActual() + pedido.getCantidadUnidades());
-            ubicacionActual = dest;
+            ruta.agregarParada(parada);
         }
-
-        // Calcular costos finales para cada ruta
-        double costoTotal = 0.0;
-        for (Ruta r : mejorSolucion) {
-            double tarifa = r.getUnidadTransporte() != null && r.getUnidadTransporte().getTipo() != null
-                    ? r.getUnidadTransporte().getTipo().getCostoPorKm() : 8.00;
-            r.calcularCosto(tarifa);
-            r.calcularTiempoEstimado();
-            costoTotal += r.getCostoTotal();
-        }
-
-        this.costoUltimaSolucion = Math.round(costoTotal * 100.0) / 100.0;
-        actualizarFeromonas(mejorSolucion);
-        return mejorSolucion;
-    }
-
-    public void actualizarFeromonas(List<Ruta> soluciones) {
-        evaporarFeromonas();
-        // Refuerzo de feromonas en proporción inversa al costo total
-        log.debug("Feromonas actualizadas con costo solución {}", costoUltimaSolucion);
-    }
-
-    public void evaporarFeromonas() {
-        if (matrizFeromonas != null) {
-            for (int i = 0; i < matrizFeromonas.length; i++) {
-                for (int j = 0; j < matrizFeromonas[i].length; j++) {
-                    matrizFeromonas[i][j] *= (1.0 - rhoEvaporacion);
-                }
-            }
-        }
+        return ruta;
     }
 }

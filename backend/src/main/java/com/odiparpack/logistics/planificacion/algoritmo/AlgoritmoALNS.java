@@ -1,11 +1,21 @@
 package com.odiparpack.logistics.planificacion.algoritmo;
 
+import com.odiparpack.logistics.almacen.model.Almacen;
+import com.odiparpack.logistics.almacen.repository.AlmacenRepository;
 import com.odiparpack.logistics.flota.model.UnidadTransporte;
 import com.odiparpack.logistics.pedidos.model.Pedido;
-import com.odiparpack.logistics.planificacion.model.ParadaRuta;
+import com.odiparpack.logistics.planificacion.algoritmo.alns.AveriaDestroyOperator;
+import com.odiparpack.logistics.planificacion.algoritmo.alns.BloqueoDestroyOperator;
+import com.odiparpack.logistics.planificacion.algoritmo.alns.CapacidadAlmacenDestroyOperator;
+import com.odiparpack.logistics.planificacion.algoritmo.alns.CostRemovalOperator;
+import com.odiparpack.logistics.planificacion.algoritmo.alns.DestroyOperator;
+import com.odiparpack.logistics.planificacion.algoritmo.alns.HolguraGreedyRepairOperator;
+import com.odiparpack.logistics.planificacion.algoritmo.alns.PlanSolution;
+import com.odiparpack.logistics.planificacion.algoritmo.alns.PonderableOperator;
+import com.odiparpack.logistics.planificacion.algoritmo.alns.RandomRemovalOperator;
+import com.odiparpack.logistics.planificacion.algoritmo.alns.RepairOperator;
 import com.odiparpack.logistics.planificacion.model.Ruta;
 import com.odiparpack.logistics.redvial.model.RedVial;
-import com.odiparpack.logistics.redvial.model.Ubicacion;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -15,11 +25,15 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
- * Metaheurístico de Búsqueda Adaptativa de Gran Vecindario (Adaptive Large Neighborhood Search - ALNS)
- * para el problema de ruteo de vehículos con ventanas de tiempo.
+ * Metaheurístico de Búsqueda Adaptativa de Gran Vecindario (ALNS)
+ * sobre la asignación y ruteo multi-vehículo y multi-almacén (RF-06).
+ * Incluye los 5 operadores de destrucción descritos en la sección 3.3:
+ * - 2 generales: RandomRemovalOperator, CostRemovalOperator
+ * - 3 de dominio: CapacidadAlmacenDestroyOperator, BloqueoDestroyOperator, AveriaDestroyOperator
+ * Y el operador de reparación voraz por holgura (HolguraGreedyRepairOperator).
+ * La aceptación se rige por Recocido Simulado (Simulated Annealing).
  */
 @Slf4j
 @Getter
@@ -27,12 +41,20 @@ import java.util.UUID;
 @Component("algoritmoALNS")
 public class AlgoritmoALNS implements AlgoritmoRuteo {
 
-    private int numIteraciones = 100;
-    private double factorDestruccion = 0.25;
-    private double temperaturaInicial = 1000.0;
-    private double[] pesosOperadores = {1.0, 1.0, 1.0};
+    private final AlmacenRepository almacenRepository;
 
+    private double temperaturaInicial = 100.0;    // T0 = 100
+    private double enfriamiento = 0.95;           // c = 0.95
+    private double factorDestruccion = 0.20;       // 20%
+    private long limiteMillis = 2000;              // Límite de tiempo en ms por ejecución
+
+    private PlanSolution actual;
+    private PlanSolution mejor;
     private double costoUltimaSolucion = 0.0;
+
+    public AlgoritmoALNS(AlmacenRepository almacenRepository) {
+        this.almacenRepository = almacenRepository;
+    }
 
     @Override
     public String obtenerNombre() {
@@ -47,9 +69,10 @@ public class AlgoritmoALNS implements AlgoritmoRuteo {
     @Override
     public void configurarParametros(Map<String, Double> params) {
         if (params == null) return;
-        if (params.containsKey("numIteraciones")) this.numIteraciones = params.get("numIteraciones").intValue();
-        if (params.containsKey("factorDestruccion")) this.factorDestruccion = params.get("factorDestruccion");
         if (params.containsKey("temperaturaInicial")) this.temperaturaInicial = params.get("temperaturaInicial");
+        if (params.containsKey("enfriamiento")) this.enfriamiento = params.get("enfriamiento");
+        if (params.containsKey("factorDestruccion")) this.factorDestruccion = params.get("factorDestruccion");
+        if (params.containsKey("limiteMillis")) this.limiteMillis = params.get("limiteMillis").longValue();
     }
 
     @Override
@@ -60,88 +83,97 @@ public class AlgoritmoALNS implements AlgoritmoRuteo {
 
         log.info("Ejecutando {} con {} pedidos y {} unidades...", obtenerNombre(), pedidos.size(), flota.size());
 
-        // 1. Solución inicial constructiva
-        List<Ruta> solucion = new ArrayList<>();
-        int vehiculoIdx = 0;
-        Ruta ruta = null;
-        UnidadTransporte unidad = null;
-        Ubicacion pos = null;
-        LocalDateTime reloj = LocalDateTime.now();
+        List<Almacen> almacenes = (almacenRepository != null) ? almacenRepository.findAll() : new ArrayList<>();
+        LocalDateTime tiempoInicio = LocalDateTime.now();
 
-        for (Pedido p : pedidos) {
-            if (unidad == null || ruta == null || !unidad.puedeAtender(p)) {
-                if (vehiculoIdx < flota.size()) {
-                    unidad = flota.get(vehiculoIdx++);
-                    pos = unidad.getUbicacionActual() != null ? unidad.getUbicacionActual() : new Ubicacion(35, 25);
-                    ruta = Ruta.builder()
-                            .codigo("RUT-" + UUID.randomUUID().toString().substring(0, 8))
-                            .unidadTransporte(unidad)
-                            .fechaHoraGeneracion(reloj)
-                            .paradas(new ArrayList<>())
-                            .distanciaTotalKm(0.0)
-                            .build();
-                    solucion.add(ruta);
+        // 1. Solución inicial constructiva
+        this.actual = PlanSolution.asignacionVoraz(pedidos, flota, almacenes, red, tiempoInicio);
+        this.mejor = actual.clonar();
+
+        // 2. Instanciar operadores de destrucción y reparación
+        List<DestroyOperator> destructores = new ArrayList<>();
+        List<RepairOperator> reparadores = new ArrayList<>();
+
+        // Operadores generales
+        destructores.add(new RandomRemovalOperator());
+        destructores.add(new CostRemovalOperator());
+
+        // Operadores de dominio
+        destructores.add(new CapacidadAlmacenDestroyOperator(almacenes));
+        destructores.add(new BloqueoDestroyOperator(red));
+        destructores.add(new AveriaDestroyOperator(flota));
+
+        // Operador de reparación guiado por holgura
+        reparadores.add(new HolguraGreedyRepairOperator(red, almacenes, flota));
+
+        // 3. Bucle metaheurístico ALNS con Recocido Simulado
+        long inicio = System.currentTimeMillis();
+        double temperatura = this.temperaturaInicial;
+
+        while ((System.currentTimeMillis() - inicio) < limiteMillis && temperatura > 0.1) {
+            DestroyOperator destructor = seleccionarPorPeso(destructores);
+            RepairOperator reparador = seleccionarPorPeso(reparadores);
+
+            PlanSolution candidata = actual.clonar();
+            List<Pedido> liberados = destructor.destruir(candidata, factorDestruccion);
+            reparador.reparar(candidata, liberados);
+
+            if (candidata.cumpleRestriccionesDuras(flota, almacenes)) {
+                double costoActual = actual.costoTotal();
+                double costoCandidata = candidata.costoTotal();
+
+                if (aceptar(costoActual, costoCandidata, temperatura)) {
+                    actual = candidata;
+                    if (costoCandidata < mejor.costoTotal()) {
+                        mejor = candidata.clonar();
+                        destructor.reforzar(3.0);
+                        reparador.reforzar(3.0);
+                    } else {
+                        destructor.reforzar(1.0);
+                        reparador.reforzar(1.0);
+                    }
                 } else {
-                    break;
+                    destructor.reforzar(0.1);
+                    reparador.reforzar(0.1);
                 }
+            } else {
+                destructor.reforzar(0.1);
+                reparador.reforzar(0.1);
             }
 
-            Ubicacion dest = p.getDestino() != null ? p.getDestino() : new Ubicacion(35, 25);
-            double dist = pos.distanciaOrtogonalA(dest);
-            double vel = unidad.getTipo() != null ? unidad.getTipo().getVelocidadPromedioKmH() : 40.0;
-            int minViaje = (int) Math.ceil((dist / vel) * 60.0);
-            reloj = reloj.plusMinutes(minViaje);
-
-            ParadaRuta parada = ParadaRuta.builder()
-                    .pedido(p)
-                    .horaEstimadaLlegada(reloj)
-                    .tiempoServicioMin(60)
-                    .build();
-            ruta.agregarParada(parada);
-            reloj = reloj.plusMinutes(60);
-
-            ruta.setDistanciaTotalKm(ruta.getDistanciaTotalKm() + dist);
-            unidad.setCargaActual(unidad.getCargaActual() + p.getCantidadUnidades());
-            pos = dest;
+            actualizarPesos(destructores, reparadores);
+            temperatura *= enfriamiento;
         }
 
-        // 2. Iteraciones de destrucción y reparación (ALNS)
-        for (int i = 0; i < Math.min(numIteraciones, 20); i++) {
-            List<Pedido> removidos = destruir(solucion);
-            solucion = reparar(solucion, removidos);
-            actualizarPesosOperadores(true);
-        }
+        mejor.recalcularMetricas(red, tiempoInicio);
+        double costoTotalReal = mejor.getRutas().stream().mapToDouble(Ruta::getCostoTotal).sum();
+        this.costoUltimaSolucion = Math.round(costoTotalReal * 100.0) / 100.0;
 
-        // 3. Costo final
-        double total = 0.0;
-        for (Ruta r : solucion) {
-            double tarifa = r.getUnidadTransporte() != null && r.getUnidadTransporte().getTipo() != null
-                    ? r.getUnidadTransporte().getTipo().getCostoPorKm() : 8.00;
-            r.calcularCosto(tarifa);
-            r.calcularTiempoEstimado();
-            total += r.getCostoTotal();
-        }
-
-        this.costoUltimaSolucion = Math.round(total * 100.0) / 100.0;
-        return solucion;
+        log.info("ALNS completado: {} rutas planificadas, costo total S/ {}", mejor.getRutas().size(), costoUltimaSolucion);
+        return mejor.getRutas();
     }
 
-    public List<Pedido> destruir(List<Ruta> solucion) {
-        List<Pedido> removidos = new ArrayList<>();
-        int cantRemover = (int) Math.max(1, solucion.size() * factorDestruccion);
-        // Remover aleatoriamente paradas de rutas seleccionadas
-        return removidos;
+    private boolean aceptar(double costoActual, double costoCandidata, double temp) {
+        if (costoCandidata < costoActual) return true;
+        if (temp <= 0.0) return false;
+        return Math.random() < Math.exp((costoActual - costoCandidata) / temp);
     }
 
-    public List<Ruta> reparar(List<Ruta> solucionParcial, List<Pedido> removidos) {
-        // Reinsertar pedidos removidos con criterio de menor costo marginal
-        return solucionParcial;
-    }
-
-    public void actualizarPesosOperadores(boolean exito) {
-        // Adaptación de pesos de operadores de destrucción/reparación
-        if (exito && pesosOperadores != null && pesosOperadores.length > 0) {
-            pesosOperadores[0] += 0.05;
+    private <T extends PonderableOperator> T seleccionarPorPeso(List<T> operadores) {
+        double suma = operadores.stream().mapToDouble(PonderableOperator::getPeso).sum();
+        if (suma <= 0.0) return operadores.get((int) (Math.random() * operadores.size()));
+        double rand = Math.random() * suma;
+        double acc = 0.0;
+        for (T op : operadores) {
+            acc += op.getPeso();
+            if (acc >= rand) return op;
         }
+        return operadores.get(0);
+    }
+
+    private void actualizarPesos(List<DestroyOperator> destructores, List<RepairOperator> reparadores) {
+        double lambda = 0.3;
+        for (PonderableOperator op : destructores) op.actualizarPeso(lambda);
+        for (PonderableOperator op : reparadores) op.actualizarPeso(lambda);
     }
 }
