@@ -25,7 +25,9 @@ public class LogisticsApplication {
             if (appArgs.containsOption("benchmark") || "true".equalsIgnoreCase(System.getenv("RUN_BENCHMARK"))) {
                 String mes = appArgs.containsOption("mes") ? appArgs.getOptionValues("mes").get(0) : "202601";
                 String pedidos = appArgs.containsOption("pedidos") ? appArgs.getOptionValues("pedidos").get(0) : "30";
-                BenchmarkMetaheuristicas.main(new String[]{mes, "", pedidos});
+                boolean averia = appArgs.containsOption("averia") || appArgs.getNonOptionArgs().contains("averia")
+                        || "true".equalsIgnoreCase(System.getenv("SIMULAR_AVERIA"));
+                BenchmarkMetaheuristicas.main(new String[]{mes, "", pedidos, averia ? "averia" : ""});
                 System.exit(0);
             }
         };

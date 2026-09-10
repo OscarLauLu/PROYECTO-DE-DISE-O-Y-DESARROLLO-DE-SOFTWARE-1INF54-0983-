@@ -74,7 +74,7 @@ public class PlanSolution {
         if (vehiculo != null && vehiculo.getUbicacionActual() != null) {
             return red.obtenerNodo(vehiculo.getUbicacionActual().getPosX(), vehiculo.getUbicacionActual().getPosY());
         }
-        return red.obtenerNodo(35, 25);
+        return red.obtenerNodo(27, 14);
     }
 
     /**
@@ -146,7 +146,7 @@ public class PlanSolution {
                     ? red.obtenerNodo(r.getAlmacenOrigen().getUbicacion().getPosX(), r.getAlmacenOrigen().getUbicacion().getPosY())
                     : (r.getUnidadTransporte() != null && r.getUnidadTransporte().getUbicacionActual() != null
                     ? red.obtenerNodo(r.getUnidadTransporte().getUbicacionActual().getPosX(), r.getUnidadTransporte().getUbicacionActual().getPosY())
-                    : red.obtenerNodo(35, 25));
+                    : red.obtenerNodo(27, 14));
 
             LocalDateTime reloj = tiempoInicio;
             double distTotal = 0.0;
@@ -158,7 +158,7 @@ public class PlanSolution {
             int orden = 1;
             for (ParadaRuta parada : r.getParadas()) {
                 parada.setOrden(orden++);
-                Ubicacion dest = parada.getPedido().getDestino() != null ? parada.getPedido().getDestino() : new Ubicacion(35, 25);
+                Ubicacion dest = parada.getPedido().getDestino() != null ? parada.getPedido().getDestino() : new Ubicacion(27, 14);
                 Nodo nodoDest = red.obtenerNodo(dest.getPosX(), dest.getPosY());
 
                 double d = red.distanciaMinima(actual, nodoDest, reloj);
@@ -178,10 +178,10 @@ public class PlanSolution {
             if (!r.getParadas().isEmpty()) {
                 Nodo origen = (r.getAlmacenOrigen() != null && r.getAlmacenOrigen().getUbicacion() != null)
                         ? red.obtenerNodo(r.getAlmacenOrigen().getUbicacion().getPosX(), r.getAlmacenOrigen().getUbicacion().getPosY())
-                        : red.obtenerNodo(35, 25);
+                        : red.obtenerNodo(27, 14);
                 double distRetorno = red.distanciaMinima(actual, origen, reloj);
                 if (distRetorno == Double.MAX_VALUE) {
-                    distRetorno = actual.aUbicacion().distanciaOrtogonalA(new Ubicacion(35, 25));
+                    distRetorno = actual.aUbicacion().distanciaOrtogonalA(new Ubicacion(27, 14));
                 }
                 distTotal += distRetorno;
                 long minRetorno = (long) Math.ceil((distRetorno / velocidad) * 60.0);

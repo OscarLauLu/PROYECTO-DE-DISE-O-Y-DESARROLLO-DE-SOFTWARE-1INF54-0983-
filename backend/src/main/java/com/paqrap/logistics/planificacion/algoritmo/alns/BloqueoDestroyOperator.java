@@ -47,14 +47,14 @@ public class BloqueoDestroyOperator extends DestroyOperator {
             Ubicacion posActual = (r.getAlmacenOrigen() != null && r.getAlmacenOrigen().getUbicacion() != null)
                     ? r.getAlmacenOrigen().getUbicacion()
                     : (r.getUnidadTransporte() != null && r.getUnidadTransporte().getUbicacionActual() != null
-                    ? r.getUnidadTransporte().getUbicacionActual() : new Ubicacion(35, 25));
+                    ? r.getUnidadTransporte().getUbicacionActual() : new Ubicacion(27, 14));
 
             Nodo nodoActual = redVial.obtenerNodo(posActual.getPosX(), posActual.getPosY());
 
             List<ParadaRuta> paradasARemover = new ArrayList<>();
             for (ParadaRuta p : paradas) {
                 if (p.getPedido() == null) continue;
-                Ubicacion dest = p.getPedido().getDestino() != null ? p.getPedido().getDestino() : new Ubicacion(35, 25);
+                Ubicacion dest = p.getPedido().getDestino() != null ? p.getPedido().getDestino() : new Ubicacion(27, 14);
                 Nodo nodoDest = redVial.obtenerNodo(dest.getPosX(), dest.getPosY());
 
                 // Verificar si la distancia libre de bloqueos difiere de la directa o si está bloqueado

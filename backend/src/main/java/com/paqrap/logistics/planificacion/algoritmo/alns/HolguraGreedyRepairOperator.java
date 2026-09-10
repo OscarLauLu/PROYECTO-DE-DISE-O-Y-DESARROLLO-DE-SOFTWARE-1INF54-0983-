@@ -170,7 +170,7 @@ public class HolguraGreedyRepairOperator extends RepairOperator {
         Ubicacion origen = (r.getAlmacenOrigen() != null && r.getAlmacenOrigen().getUbicacion() != null)
                 ? r.getAlmacenOrigen().getUbicacion()
                 : (r.getUnidadTransporte() != null && r.getUnidadTransporte().getUbicacionActual() != null
-                ? r.getUnidadTransporte().getUbicacionActual() : new Ubicacion(35, 25));
+                ? r.getUnidadTransporte().getUbicacionActual() : new Ubicacion(27, 14));
 
         Ubicacion nodoAnt = (pos == 0)
                 ? origen
@@ -180,7 +180,7 @@ public class HolguraGreedyRepairOperator extends RepairOperator {
                 ? r.getParadas().get(pos).getPedido().getDestino()
                 : null;
 
-        Ubicacion destP = p.getDestino() != null ? p.getDestino() : new Ubicacion(35, 25);
+        Ubicacion destP = p.getDestino() != null ? p.getDestino() : new Ubicacion(27, 14);
 
         double d1 = redVial.distanciaMinima(nodoAnt, destP, ahora);
         if (d1 == Double.MAX_VALUE) return Double.MAX_VALUE;
@@ -203,7 +203,7 @@ public class HolguraGreedyRepairOperator extends RepairOperator {
 
         Ubicacion actual = (r.getAlmacenOrigen() != null && r.getAlmacenOrigen().getUbicacion() != null)
                 ? r.getAlmacenOrigen().getUbicacion()
-                : (unidad != null && unidad.getUbicacionActual() != null ? unidad.getUbicacionActual() : new Ubicacion(35, 25));
+                : (unidad != null && unidad.getUbicacionActual() != null ? unidad.getUbicacionActual() : new Ubicacion(27, 14));
 
         LocalDateTime reloj = ahora;
         List<ParadaRuta> copiaParadas = new ArrayList<>(r.getParadas());
@@ -212,7 +212,7 @@ public class HolguraGreedyRepairOperator extends RepairOperator {
         for (ParadaRuta parada : copiaParadas) {
             Pedido pedido = parada.getPedido();
             if (pedido == null) continue;
-            Ubicacion dest = pedido.getDestino() != null ? pedido.getDestino() : new Ubicacion(35, 25);
+            Ubicacion dest = pedido.getDestino() != null ? pedido.getDestino() : new Ubicacion(27, 14);
             double dist = redVial.distanciaMinima(actual, dest, reloj);
             if (dist == Double.MAX_VALUE) return false;
 

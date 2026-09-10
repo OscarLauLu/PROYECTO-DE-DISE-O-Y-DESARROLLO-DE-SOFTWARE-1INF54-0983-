@@ -47,7 +47,7 @@ public class CostRemovalOperator extends DestroyOperator {
             Ubicacion origen = (r.getAlmacenOrigen() != null && r.getAlmacenOrigen().getUbicacion() != null)
                     ? r.getAlmacenOrigen().getUbicacion()
                     : (r.getUnidadTransporte() != null && r.getUnidadTransporte().getUbicacionActual() != null
-                    ? r.getUnidadTransporte().getUbicacionActual() : new Ubicacion(35, 25));
+                    ? r.getUnidadTransporte().getUbicacionActual() : new Ubicacion(27, 14));
 
             for (int i = 0; i < paradas.size(); i++) {
                 ParadaRuta p = paradas.get(i);

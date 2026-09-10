@@ -12,6 +12,10 @@ import com.paqrap.logistics.pedidos.model.TipoEntrega;
 import com.paqrap.logistics.planificacion.model.Ruta;
 import com.paqrap.logistics.redvial.model.RedVial;
 import com.paqrap.logistics.redvial.model.Ubicacion;
+import com.paqrap.logistics.planificacion.algoritmo.alns.AveriaDestroyOperator;
+import com.paqrap.logistics.planificacion.algoritmo.alns.HolguraGreedyRepairOperator;
+import com.paqrap.logistics.planificacion.algoritmo.alns.PlanSolution;
+import com.paqrap.logistics.planificacion.model.ParadaRuta;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -20,6 +24,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -49,19 +54,19 @@ class AlgoritmosTest {
         flota = new ArrayList<>();
         flota.add(UnidadTransporte.builder()
                 .id(1L)
-                .codigo("VEH-001")
+                .codigo("TA01")
                 .tipo(tipoAuto)
                 .estadoOperativo(EstadoOperativo.DISPONIBLE)
-                .ubicacionActual(new Ubicacion(10, 10))
+                .ubicacionActual(new Ubicacion(27, 14))
                 .activo(true)
                 .build());
 
         flota.add(UnidadTransporte.builder()
                 .id(2L)
-                .codigo("VEH-002")
+                .codigo("TA02")
                 .tipo(tipoAuto)
                 .estadoOperativo(EstadoOperativo.DISPONIBLE)
-                .ubicacionActual(new Ubicacion(10, 10))
+                .ubicacionActual(new Ubicacion(27, 14))
                 .activo(true)
                 .build());
 
@@ -101,7 +106,7 @@ class AlgoritmosTest {
                 .build());
 
         almacenes = new ArrayList<>();
-        almacenes.add(new AlmacenCentral("ALM-CEN", "Almacén Central", new Ubicacion(10, 10)));
+        almacenes.add(new AlmacenCentral("ALM-CEN-01", "Almacén Central", new Ubicacion(27, 14)));
 
         almacenRepository = Mockito.mock(AlmacenRepository.class);
         when(almacenRepository.findAll()).thenReturn(almacenes);
@@ -141,5 +146,49 @@ class AlgoritmosTest {
             assertFalse(r.capacidadExcedida(), "Ninguna ruta debe exceder la capacidad máxima");
             assertTrue(r.cumplePlazos(), "Todas las paradas deben cumplir los plazos");
         }
+    }
+
+    @Test
+    void testContingenciaAveria_LiberaYReasignaPedidos() {
+        UnidadTransporte u1 = flota.get(0); // TA01
+        UnidadTransporte u2 = flota.get(1); // TA02
+
+        Ruta rutaInicial = Ruta.builder()
+                .codigo("RUT-TEST-01")
+                .unidadTransporte(u1)
+                .almacenOrigen(almacenes.get(0))
+                .fechaHoraGeneracion(LocalDateTime.now())
+                .paradas(new ArrayList<>())
+                .build();
+
+        for (Pedido p : pedidos) {
+            rutaInicial.agregarParada(ParadaRuta.builder().pedido(p).tiempoServicioMin(60).build());
+        }
+
+        PlanSolution plan = new PlanSolution();
+        plan.getRutas().add(rutaInicial);
+
+        // 1. Simular avería mecánica en TA01 (RF-14)
+        u1.cambiarEstado(EstadoOperativo.AVERIADA);
+        u1.setActivo(false);
+
+        // 2. Ejecutar AveriaDestroyOperator: debe desalojar los paquetes de la unidad averiada
+        AveriaDestroyOperator destroyAveria = new AveriaDestroyOperator(flota);
+        List<Pedido> liberados = destroyAveria.destruir(plan, 0.20);
+
+        assertFalse(liberados.isEmpty(), "AveriaDestroyOperator debe liberar los pedidos de la unidad averiada");
+        assertEquals(3, liberados.size(), "Debe liberar los 3 pedidos de TA01");
+        assertTrue(rutaInicial.getParadas().isEmpty(), "La ruta de la unidad averiada debe quedar vacía");
+
+        // 3. Ejecutar HolguraGreedyRepairOperator para reasignar a VEH-002 (RF-15, RF-16)
+        HolguraGreedyRepairOperator repair = new HolguraGreedyRepairOperator(redVial, almacenes, flota);
+        repair.reparar(plan, liberados);
+
+        // Verificar que los pedidos fueron reinsertados en unidades disponibles
+        boolean asignadosEnVehiculoSano = plan.getRutas().stream()
+                .filter(r -> !r.getParadas().isEmpty())
+                .allMatch(r -> r.getUnidadTransporte() != null && r.getUnidadTransporte().getEstadoOperativo() == EstadoOperativo.DISPONIBLE);
+
+        assertTrue(asignadosEnVehiculoSano, "Todos los pedidos deben haber sido rescatados y reasignados a vehículos operativos");
     }
 }

@@ -6,10 +6,11 @@ if [ "$1" = "benchmark" ] || [ "$1" = "bench" ]; then
     shift
     MES="${1:-202601}"
     PEDIDOS="${2:-30}"
+    shift 2 2>/dev/null || shift 1 2>/dev/null || true
     echo "================================================================================"
     echo "  EJECUTANDO BENCHMARK NATIVO JAVA EN CONTENEDOR DOCKER (Mes: $MES, Pedidos: $PEDIDOS)"
     echo "================================================================================"
-    exec java -jar /app/app.jar --benchmark --mes="$MES" --pedidos="$PEDIDOS"
+    exec java -jar /app/app.jar --benchmark --mes="$MES" --pedidos="$PEDIDOS" "$@"
 
 # Modo 2: Shell interactivo
 elif [ "$1" = "sh" ] || [ "$1" = "bash" ]; then

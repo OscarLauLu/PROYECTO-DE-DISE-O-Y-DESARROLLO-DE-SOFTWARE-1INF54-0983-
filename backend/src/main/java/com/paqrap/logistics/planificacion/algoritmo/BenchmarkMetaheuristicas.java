@@ -94,6 +94,36 @@ public class BenchmarkMetaheuristicas {
         List<UnidadTransporte> flotaAco = crearFlotaEstandar();
         List<UnidadTransporte> flotaAlns = crearFlotaEstandar();
 
+        // Evaluar si se solicita contingencia por averías mecánicas (RF-14, RF-15)
+        boolean conAveria = false;
+        for (String a : args) {
+            if ("averia".equalsIgnoreCase(a) || "--averia".equalsIgnoreCase(a) || "--averias".equalsIgnoreCase(a)) {
+                conAveria = true;
+                break;
+            }
+        }
+        if (conAveria) {
+            System.out.println("\n" + "!".repeat(80));
+            System.out.println("  [CONTINGENCIA RF-14 / RF-15] INYECCIÓN DE AVERÍAS EN LA FLOTA:");
+            System.out.println("  -> TA02 (Auto): Falla mecánica en motor -> Estado: AVERIADA (Inhabilitado)");
+            System.out.println("  -> TM01 (Moto): Falla en transmisión   -> Estado: AVERIADA (Inhabilitado)");
+            System.out.println("  Flota operativa reducida: 8 unidades disponibles (3 Autos, 2 Motos, 3 Bicis)");
+            System.out.println("!".repeat(80));
+
+            for (UnidadTransporte u : flotaAco) {
+                if ("TA02".equals(u.getCodigo()) || "TM01".equals(u.getCodigo())) {
+                    u.cambiarEstado(EstadoOperativo.AVERIADA);
+                    u.setActivo(false);
+                }
+            }
+            for (UnidadTransporte u : flotaAlns) {
+                if ("TA02".equals(u.getCodigo()) || "TM01".equals(u.getCodigo())) {
+                    u.cambiarEstado(EstadoOperativo.AVERIADA);
+                    u.setActivo(false);
+                }
+            }
+        }
+
         // 5. Ejecutar ACO
         System.out.println("\n>>> Ejecutando Algoritmo ACO (Ant Colony Optimization)...");
         AlgoritmoACO aco = new AlgoritmoACO();
@@ -121,17 +151,17 @@ public class BenchmarkMetaheuristicas {
         TipoVehiculo moto = TipoVehiculo.builder().id(2L).nombre("Moto").capacidadMaxima(8).velocidadPromedioKmH(25.0).costoPorKm(6.0).build();
         TipoVehiculo bici = TipoVehiculo.builder().id(3L).nombre("Bicicleta").capacidadMaxima(4).velocidadPromedioKmH(12.0).costoPorKm(3.0).build();
 
-        // 4 Autos
+        // 4 Autos (TA01..TA04) - Almacén Central (27, 14)
         for (int i = 1; i <= 4; i++) {
-            flota.add(UnidadTransporte.builder().id((long) i).codigo("AUT-0" + i).tipo(auto).estadoOperativo(EstadoOperativo.DISPONIBLE).ubicacionActual(new Ubicacion(35, 25)).activo(true).build());
+            flota.add(UnidadTransporte.builder().id((long) i).codigo(String.format("TA%02d", i)).tipo(auto).estadoOperativo(EstadoOperativo.DISPONIBLE).ubicacionActual(new Ubicacion(27, 14)).activo(true).build());
         }
-        // 3 Motos
+        // 3 Motos (TM01..TM03) - Almacén Central (27, 14)
         for (int i = 1; i <= 3; i++) {
-            flota.add(UnidadTransporte.builder().id((long) (4 + i)).codigo("MOT-0" + i).tipo(moto).estadoOperativo(EstadoOperativo.DISPONIBLE).ubicacionActual(new Ubicacion(35, 25)).activo(true).build());
+            flota.add(UnidadTransporte.builder().id((long) (4 + i)).codigo(String.format("TM%02d", i)).tipo(moto).estadoOperativo(EstadoOperativo.DISPONIBLE).ubicacionActual(new Ubicacion(27, 14)).activo(true).build());
         }
-        // 3 Bicicletas
+        // 3 Bicicletas (TB01..TB03) - Almacén Central (27, 14)
         for (int i = 1; i <= 3; i++) {
-            flota.add(UnidadTransporte.builder().id((long) (7 + i)).codigo("BIC-0" + i).tipo(bici).estadoOperativo(EstadoOperativo.DISPONIBLE).ubicacionActual(new Ubicacion(35, 25)).activo(true).build());
+            flota.add(UnidadTransporte.builder().id((long) (7 + i)).codigo(String.format("TB%02d", i)).tipo(bici).estadoOperativo(EstadoOperativo.DISPONIBLE).ubicacionActual(new Ubicacion(27, 14)).activo(true).build());
         }
         return flota;
     }

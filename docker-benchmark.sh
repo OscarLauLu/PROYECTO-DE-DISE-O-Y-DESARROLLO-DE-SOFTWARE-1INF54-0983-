@@ -15,19 +15,21 @@ echo "==========================================================================
 echo "          EJECUTANDO BENCHMARK EN DOCKER (Mes: $MES, Pedidos: $PEDIDOS)        "
 echo "================================================================================"
 
+EXTRA_ARGS="${@:3}"
+
 # 1. Probar con docker-compose (con guion)
 if command -v docker-compose >/dev/null 2>&1; then
     echo "-> Usando docker-compose..."
-    docker-compose run --rm benchmark benchmark "$MES" "$PEDIDOS"
+    docker-compose run --rm benchmark benchmark "$MES" "$PEDIDOS" $EXTRA_ARGS
 
 # 2. Probar con docker compose (con espacio, v2 plugin)
 elif docker compose version >/dev/null 2>&1; then
     echo "-> Usando docker compose..."
-    docker compose run --rm benchmark benchmark "$MES" "$PEDIDOS"
+    docker compose run --rm benchmark benchmark "$MES" "$PEDIDOS" $EXTRA_ARGS
 
 # 3. Fallback universal: docker build + docker run
 else
     echo "-> Usando docker directo (construyendo imagen si no existe)..."
     docker build -t paqrap .
-    docker run --rm -v "$SCRIPT_DIR/datos:/app/datos:ro" paqrap benchmark "$MES" "$PEDIDOS"
+    docker run --rm -v "$SCRIPT_DIR/datos:/app/datos:ro" paqrap benchmark "$MES" "$PEDIDOS" $EXTRA_ARGS
 fi

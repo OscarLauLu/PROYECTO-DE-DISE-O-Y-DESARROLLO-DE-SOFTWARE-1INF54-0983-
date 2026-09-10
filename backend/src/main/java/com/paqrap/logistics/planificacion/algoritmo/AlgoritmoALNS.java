@@ -197,15 +197,15 @@ public class AlgoritmoALNS implements AlgoritmoRuteo {
         central.setId(1L);
         central.setCodigo("ALM-CEN-01");
         central.setNombre("Almacén Central");
-        central.setUbicacion(new Ubicacion(35, 25));
+        central.setUbicacion(new Ubicacion(27, 14));
         central.setStockActual(999999);
         lista.add(central);
 
         AlmacenIntermedio int1 = new AlmacenIntermedio();
         int1.setId(2L);
         int1.setCodigo("ALM-INT-01");
-        int1.setNombre("Almacén Intermedio Norte");
-        int1.setUbicacion(new Ubicacion(15, 15));
+        int1.setNombre("Almacén Intermedio Nor-Oeste");
+        int1.setUbicacion(new Ubicacion(12, 38));
         int1.setStockActual(1000);
         int1.setCapacidadMaxima(1000);
         int1.setUmbralAlertaOcupacion(90.0);
@@ -214,8 +214,8 @@ public class AlgoritmoALNS implements AlgoritmoRuteo {
         AlmacenIntermedio int2 = new AlmacenIntermedio();
         int2.setId(3L);
         int2.setCodigo("ALM-INT-02");
-        int2.setNombre("Almacén Intermedio Sur");
-        int2.setUbicacion(new Ubicacion(55, 35));
+        int2.setNombre("Almacén Intermedio Este");
+        int2.setUbicacion(new Ubicacion(57, 27));
         int2.setStockActual(1000);
         int2.setCapacidadMaxima(1000);
         int2.setUmbralAlertaOcupacion(90.0);

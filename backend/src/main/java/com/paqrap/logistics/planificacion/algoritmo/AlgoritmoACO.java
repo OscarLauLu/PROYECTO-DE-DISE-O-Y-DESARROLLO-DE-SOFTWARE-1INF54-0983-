@@ -1,5 +1,6 @@
 package com.paqrap.logistics.planificacion.algoritmo;
 
+import com.paqrap.logistics.flota.model.EstadoOperativo;
 import com.paqrap.logistics.flota.model.UnidadTransporte;
 import com.paqrap.logistics.pedidos.model.Pedido;
 import com.paqrap.logistics.planificacion.algoritmo.aco.ConfigACO;
@@ -93,13 +94,15 @@ public class AlgoritmoACO implements AlgoritmoRuteo {
 
         for (UnidadTransporte vehiculo : flota) {
             if (pedidosPendientes.isEmpty()) break;
-            if (!vehiculo.isActivo()) continue;
+            if (!vehiculo.isActivo() || (vehiculo.getEstadoOperativo() != null && vehiculo.getEstadoOperativo() != EstadoOperativo.DISPONIBLE)) {
+                continue;
+            }
 
             Ubicacion ubicacionVehiculo = vehiculo.getUbicacionActual() != null
-                    ? vehiculo.getUbicacionActual() : new Ubicacion(35, 25);
+                    ? vehiculo.getUbicacionActual() : new Ubicacion(27, 14);
             Nodo nodoOrigen = red.obtenerNodo(ubicacionVehiculo.getPosX(), ubicacionVehiculo.getPosY());
             if (nodoOrigen == null) {
-                nodoOrigen = new Nodo(35, 25);
+                nodoOrigen = new Nodo(27, 14);
             }
 
             // Construir la mejor ruta para este vehículo usando ACO
@@ -180,7 +183,7 @@ public class AlgoritmoACO implements AlgoritmoRuteo {
                 if (ant.yaAtendio(o)) continue;
                 if (ant.getCargaAcumulada() + o.getCantidadUnidades() > capacidadMax) continue;
 
-                Ubicacion dest = o.getDestino() != null ? o.getDestino() : new Ubicacion(35, 25);
+                Ubicacion dest = o.getDestino() != null ? o.getDestino() : new Ubicacion(27, 14);
                 Nodo nodoCliente = red.obtenerNodo(dest.getPosX(), dest.getPosY());
                 if (nodoCliente == null) continue;
 
@@ -207,7 +210,7 @@ public class AlgoritmoACO implements AlgoritmoRuteo {
             double costoTramo = d * costoKm;
             LocalDateTime llegada = llegadas.get(elegido);
 
-            Ubicacion destElegido = elegido.getDestino() != null ? elegido.getDestino() : new Ubicacion(35, 25);
+            Ubicacion destElegido = elegido.getDestino() != null ? elegido.getDestino() : new Ubicacion(27, 14);
             Nodo nodoElegido = red.obtenerNodo(destElegido.getPosX(), destElegido.getPosY());
 
             ant.getPedidosAtendidos().add(elegido);
@@ -248,7 +251,7 @@ public class AlgoritmoACO implements AlgoritmoRuteo {
             double costoTramo = distancias.get(o) * costoPorKm;
             double heuristica = urgencia / (costoTramo + 1.0);
 
-            Ubicacion dest = o.getDestino() != null ? o.getDestino() : new Ubicacion(35, 25);
+            Ubicacion dest = o.getDestino() != null ? o.getDestino() : new Ubicacion(27, 14);
             Nodo nodoCliente = red.obtenerNodo(dest.getPosX(), dest.getPosY());
             double feromona = getPheromone(current, nodoCliente);
 
@@ -277,7 +280,7 @@ public class AlgoritmoACO implements AlgoritmoRuteo {
         Nodo current = origenNode;
         double deposito = 1.0 / (ant.getCostoAcumulado() + 1.0);
         for (Pedido o : ant.getPedidosAtendidos()) {
-            Ubicacion dest = o.getDestino() != null ? o.getDestino() : new Ubicacion(35, 25);
+            Ubicacion dest = o.getDestino() != null ? o.getDestino() : new Ubicacion(27, 14);
             Nodo nodoCliente = red.obtenerNodo(dest.getPosX(), dest.getPosY());
             addPheromone(current, nodoCliente, deposito);
             current = nodoCliente;
