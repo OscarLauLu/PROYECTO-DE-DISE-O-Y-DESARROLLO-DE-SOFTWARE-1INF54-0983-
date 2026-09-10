@@ -46,7 +46,9 @@ public class HolguraGreedyRepairOperator extends RepairOperator {
             return;
         }
 
-        LocalDateTime ahora = LocalDateTime.now();
+        LocalDateTime ahora = (solucion != null && !solucion.getRutas().isEmpty() && solucion.getRutas().get(0).getFechaHoraGeneracion() != null)
+                ? solucion.getRutas().get(0).getFechaHoraGeneracion()
+                : (liberados.stream().map(Pedido::getFechaHoraRegistro).filter(java.util.Objects::nonNull).min(LocalDateTime::compareTo).orElse(LocalDateTime.now()));
 
         // 1. Ordenar pedidos por menor holgura (RF-04: pedidos más urgentes primero)
         List<Pedido> ordenados = new ArrayList<>(liberados);

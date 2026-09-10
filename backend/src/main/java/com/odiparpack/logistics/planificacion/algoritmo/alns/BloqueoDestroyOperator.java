@@ -36,7 +36,9 @@ public class BloqueoDestroyOperator extends DestroyOperator {
             return liberados;
         }
 
-        LocalDateTime ahora = LocalDateTime.now();
+        LocalDateTime ahora = (solucion != null && !solucion.getRutas().isEmpty() && solucion.getRutas().get(0).getFechaHoraGeneracion() != null)
+                ? solucion.getRutas().get(0).getFechaHoraGeneracion()
+                : LocalDateTime.now();
 
         for (Ruta r : solucion.getRutas()) {
             List<ParadaRuta> paradas = r.getParadas();

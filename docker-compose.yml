@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # ----------------------------------------------------------------------------
   # Servidor Web Spring Boot (API REST + Swagger UI en puerto 8080)

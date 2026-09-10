@@ -14,6 +14,7 @@ import com.odiparpack.logistics.redvial.model.Ubicacion;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -46,89 +47,9 @@ public class PlanSolution {
             return plan;
         }
 
-        Almacen almacenCentral = almacenes.stream()
-                .filter(a -> a instanceof AlmacenCentral)
-                .findFirst()
-                .orElse(!almacenes.isEmpty() ? almacenes.get(0) : null);
+        HolguraGreedyRepairOperator repair = new HolguraGreedyRepairOperator(red, almacenes, flota);
+        repair.reparar(plan, pedidos);
 
-        int vehiculoIdx = 0;
-        UnidadTransporte vehiculoActual = flota.get(vehiculoIdx);
-        Almacen almacenActual = almacenCentral;
-
-        Ruta rutaActual = crearNuevaRuta(vehiculoActual, almacenActual, tiempoInicio);
-        plan.rutas.add(rutaActual);
-
-        Nodo nodoActual = obtenerNodoOrigen(vehiculoActual, almacenActual, red);
-        LocalDateTime reloj = tiempoInicio;
-
-        for (Pedido p : pedidos) {
-            int capacidadMax = vehiculoActual.getTipo() != null ? vehiculoActual.getTipo().getCapacidadMaxima() : 24;
-            double velocidad = vehiculoActual.getTipo() != null ? vehiculoActual.getTipo().getVelocidadPromedioKmH() : 40.0;
-            double costoPorKm = vehiculoActual.getTipo() != null ? vehiculoActual.getTipo().getCostoPorKm() : 8.0;
-
-            int cargaActualRuta = rutaActual.getParadas().stream()
-                    .mapToInt(parada -> parada.getPedido().getCantidadUnidades())
-                    .sum();
-
-            Ubicacion dest = p.getDestino() != null ? p.getDestino() : new Ubicacion(35, 25);
-            Nodo nodoDest = red.obtenerNodo(dest.getPosX(), dest.getPosY());
-
-            double distKm = red.distanciaMinima(nodoActual, nodoDest, reloj);
-            long minViaje = (distKm < Double.MAX_VALUE) ? (long) Math.ceil((distKm / velocidad) * 60.0) : Long.MAX_VALUE;
-            LocalDateTime estimadaLlegada = reloj.plusMinutes(minViaje);
-
-            boolean cabeCapacidad = (cargaActualRuta + p.getCantidadUnidades() <= capacidadMax);
-            boolean cumplePlazo = (distKm < Double.MAX_VALUE) && (p.getPlazoLimiteEntrega() == null || !estimadaLlegada.isAfter(p.getPlazoLimiteEntrega()));
-
-            if (!cabeCapacidad || !cumplePlazo) {
-                // Pasar al siguiente vehículo si existe
-                vehiculoIdx++;
-                if (vehiculoIdx < flota.size()) {
-                    vehiculoActual = flota.get(vehiculoIdx);
-                    rutaActual = crearNuevaRuta(vehiculoActual, almacenActual, tiempoInicio);
-                    plan.rutas.add(rutaActual);
-                    nodoActual = obtenerNodoOrigen(vehiculoActual, almacenActual, red);
-                    reloj = tiempoInicio;
-
-                    velocidad = vehiculoActual.getTipo() != null ? vehiculoActual.getTipo().getVelocidadPromedioKmH() : 40.0;
-                    costoPorKm = vehiculoActual.getTipo() != null ? vehiculoActual.getTipo().getCostoPorKm() : 8.0;
-                    distKm = red.distanciaMinima(nodoActual, nodoDest, reloj);
-                    minViaje = (distKm < Double.MAX_VALUE) ? (long) Math.ceil((distKm / velocidad) * 60.0) : Long.MAX_VALUE;
-                    estimadaLlegada = reloj.plusMinutes(minViaje);
-
-                    cabeCapacidad = (p.getCantidadUnidades() <= vehiculoActual.getTipo().getCapacidadMaxima());
-                    cumplePlazo = (distKm < Double.MAX_VALUE) && (p.getPlazoLimiteEntrega() == null || !estimadaLlegada.isAfter(p.getPlazoLimiteEntrega()));
-                } else {
-                    plan.pedidosNoAsignados.add(p);
-                    continue;
-                }
-            }
-
-            if (cabeCapacidad && cumplePlazo) {
-                ParadaRuta parada = ParadaRuta.builder()
-                        .pedido(p)
-                        .horaEstimadaLlegada(estimadaLlegada)
-                        .tiempoServicioMin(60)
-                        .build();
-                rutaActual.agregarParada(parada);
-
-                rutaActual.setDistanciaTotalKm(rutaActual.getDistanciaTotalKm() + distKm);
-                reloj = estimadaLlegada.plusMinutes(60); // 60 min de servicio (RF-09)
-                nodoActual = nodoDest;
-            } else {
-                plan.pedidosNoAsignados.add(p);
-            }
-        }
-
-        // Recalcular métricas de todas las rutas generadas
-        for (Ruta r : plan.rutas) {
-            double tarifa = (r.getUnidadTransporte() != null && r.getUnidadTransporte().getTipo() != null)
-                    ? r.getUnidadTransporte().getTipo().getCostoPorKm() : 8.0;
-            r.calcularCosto(tarifa);
-            r.calcularTiempoEstimado();
-        }
-
-        // Limpiar rutas vacías
         plan.rutas.removeIf(r -> r.getParadas().isEmpty());
         return plan;
     }
@@ -254,9 +175,22 @@ public class PlanSolution {
                 actual = nodoDest;
             }
 
+            if (!r.getParadas().isEmpty()) {
+                Nodo origen = (r.getAlmacenOrigen() != null && r.getAlmacenOrigen().getUbicacion() != null)
+                        ? red.obtenerNodo(r.getAlmacenOrigen().getUbicacion().getPosX(), r.getAlmacenOrigen().getUbicacion().getPosY())
+                        : red.obtenerNodo(35, 25);
+                double distRetorno = red.distanciaMinima(actual, origen, reloj);
+                if (distRetorno == Double.MAX_VALUE) {
+                    distRetorno = actual.aUbicacion().distanciaOrtogonalA(new Ubicacion(35, 25));
+                }
+                distTotal += distRetorno;
+                long minRetorno = (long) Math.ceil((distRetorno / velocidad) * 60.0);
+                reloj = reloj.plusMinutes(minRetorno);
+            }
+
             r.setDistanciaTotalKm(Math.round(distTotal * 100.0) / 100.0);
-            r.calcularCosto(tarifa);
-            r.calcularTiempoEstimado();
+            r.setCostoTotal(Math.round((distTotal * tarifa) * 100.0) / 100.0);
+            r.setTiempoEstimadoMin((int) Duration.between(tiempoInicio, reloj).toMinutes());
         }
     }
 

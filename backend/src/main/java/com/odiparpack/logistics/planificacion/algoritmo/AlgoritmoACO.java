@@ -82,7 +82,11 @@ public class AlgoritmoACO implements AlgoritmoRuteo {
         log.info("Ejecutando {} con {} pedidos y {} unidades disponibles...",
                 obtenerNombre(), pedidos.size(), flota.size());
 
-        LocalDateTime horaSimulada = LocalDateTime.now();
+        LocalDateTime horaSimulada = pedidos.stream()
+                .map(Pedido::getFechaHoraRegistro)
+                .filter(java.util.Objects::nonNull)
+                .min(LocalDateTime::compareTo)
+                .orElse(LocalDateTime.now());
         List<Pedido> pedidosPendientes = new ArrayList<>(pedidos);
         List<Ruta> rutasGeneradas = new ArrayList<>();
         double costoTotalGlobal = 0.0;
@@ -216,6 +220,15 @@ public class AlgoritmoACO implements AlgoritmoRuteo {
 
             current = nodoElegido;
             tiempo = llegada.plusMinutes(60); // 60 min de servicio impactan paradas posteriores (RF-09)
+        }
+        if (!ant.getPedidosAtendidos().isEmpty()) {
+            double dRetorno = red.distanciaMinima(current, origen, tiempo);
+            if (dRetorno < Double.MAX_VALUE) {
+                ant.setDistanciaAcumuladaKm(ant.getDistanciaAcumuladaKm() + dRetorno);
+                ant.setCostoAcumulado(ant.getCostoAcumulado() + (dRetorno * costoKm));
+                long minRetorno = (long) Math.ceil((dRetorno / velocidadKmH) * 60.0);
+                tiempo = tiempo.plusMinutes(minRetorno);
+            }
         }
         ant.setTiempoAcumuladoMin((int) Duration.between(horaInicio, tiempo).toMinutes());
     }

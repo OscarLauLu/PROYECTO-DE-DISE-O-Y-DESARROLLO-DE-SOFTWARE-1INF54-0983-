@@ -39,6 +39,42 @@ public class RedVial {
     private final Map<String, Tramo> tramos = new ConcurrentHashMap<>();
     private final Set<String> tramosBloqueadosActivos = ConcurrentHashMap.newKeySet();
 
+    public static class BloqueoVialInfo {
+        private final LocalDateTime inicio;
+        private final LocalDateTime fin;
+        private final Set<String> aristas;
+
+        public BloqueoVialInfo(LocalDateTime inicio, LocalDateTime fin, Set<String> aristas) {
+            this.inicio = inicio;
+            this.fin = fin;
+            this.aristas = aristas;
+        }
+
+        public boolean estaActivoEn(LocalDateTime t) {
+            if (t == null || inicio == null || fin == null) return false;
+            return !t.isBefore(inicio) && !t.isAfter(fin);
+        }
+
+        public Set<String> getAristas() {
+            return aristas;
+        }
+    }
+
+    private final List<BloqueoVialInfo> listaBloqueos = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    public Set<String> aristasBloqueadasEn(LocalDateTime instante) {
+        if (instante == null || listaBloqueos.isEmpty()) {
+            return Collections.emptySet();
+        }
+        Set<String> activas = new HashSet<>();
+        for (BloqueoVialInfo b : listaBloqueos) {
+            if (b.estaActivoEn(instante)) {
+                activas.addAll(b.getAristas());
+            }
+        }
+        return activas;
+    }
+
     @PostConstruct
     public void inicializarRed() {
         log.info("Inicializando RedVial de {}x{} km con nodos cada {} km...", anchoKm, altoKm, separacionNodosKm);
@@ -97,16 +133,13 @@ public class RedVial {
      */
     public boolean estaBloqueado(Tramo tramo, LocalDateTime instante) {
         if (tramo == null) return false;
-        if (tramosBloqueadosActivos.contains(tramo.getClaveCanonica())) {
-            return true;
-        }
-        return !tramo.estaDisponible(instante);
+        if (instante == null) return tramo.isBloqueado();
+        return aristasBloqueadasEn(instante).contains(tramo.getClaveCanonica());
     }
 
     public boolean estaBloqueadoSegmento(int x1, int y1, int x2, int y2, LocalDateTime instante) {
         String clave = obtenerClaveCanonica(x1, y1, x2, y2);
-        Tramo tramo = tramos.get(clave);
-        return tramo != null && estaBloqueado(tramo, instante);
+        return aristasBloqueadasEn(instante).contains(clave);
     }
 
     /**
@@ -202,6 +235,7 @@ public class RedVial {
     public void aplicarBloqueo(Bloqueo bloqueo) {
         if (bloqueo == null || bloqueo.getCoordenadasNodos() == null) return;
         String[] coords = bloqueo.getCoordenadasNodos().split(",");
+        Set<String> aristas = new HashSet<>();
         for (int i = 0; i + 3 < coords.length; i += 2) {
             try {
                 int x1 = Integer.parseInt(coords[i].trim());
@@ -209,9 +243,27 @@ public class RedVial {
                 int x2 = Integer.parseInt(coords[i + 2].trim());
                 int y2 = Integer.parseInt(coords[i + 3].trim());
                 procesarBloqueoSegmento(x1, y1, x2, y2, true, bloqueo.getFechaHoraInicio(), bloqueo.getFechaHoraFin());
+
+                int stepX = Integer.compare(x2, x1);
+                int stepY = Integer.compare(y2, y1);
+                int cx = x1;
+                int cy = y1;
+                while (cx != x2) {
+                    int nx = cx + stepX;
+                    aristas.add(obtenerClaveCanonica(cx, cy, nx, cy));
+                    cx = nx;
+                }
+                while (cy != y2) {
+                    int ny = cy + stepY;
+                    aristas.add(obtenerClaveCanonica(cx, cy, cx, ny));
+                    cy = ny;
+                }
             } catch (Exception e) {
                 log.error("Error al parsear coordenadas de bloqueo: {}", e.getMessage());
             }
+        }
+        if (!aristas.isEmpty()) {
+            listaBloqueos.add(new BloqueoVialInfo(bloqueo.getFechaHoraInicio(), bloqueo.getFechaHoraFin(), aristas));
         }
     }
 
@@ -280,13 +332,16 @@ public class RedVial {
 
     /**
      * Calcula la distancia más corta (en km) entre dos nodos considerando tramos bloqueados (RF-12).
-     * Retorna Double.MAX_VALUE si el destino no es alcanzable debido a bloqueos viales.
+     * Si no hay tramos bloqueados activos en el instante, retorna la distancia Manhattan directa.
      */
     public double distanciaMinima(Nodo origen, Nodo destino, LocalDateTime instante) {
         if (origen == null || destino == null) return Double.MAX_VALUE;
         if (origen.equals(destino)) return 0.0;
-        if (tramosBloqueadosActivos.isEmpty()) {
-            return calcularDistancia(origen, destino);
+
+        Set<String> aristasBloqueadas = aristasBloqueadasEn(instante);
+        double distManhattan = calcularDistancia(origen, destino);
+        if (aristasBloqueadas.isEmpty()) {
+            return distManhattan;
         }
 
         Queue<Nodo> cola = new ArrayDeque<>();
@@ -309,8 +364,7 @@ public class RedVial {
                     Nodo vecino = mallaNodos[nx][ny];
                     if (!dist.containsKey(vecino)) {
                         String claveTramo = obtenerClaveCanonica(actual.getX(), actual.getY(), nx, ny);
-                        Tramo tramo = tramos.get(claveTramo);
-                        if (tramo != null && !estaBloqueado(tramo, instante)) {
+                        if (!aristasBloqueadas.contains(claveTramo)) {
                             dist.put(vecino, d + 1);
                             cola.add(vecino);
                         }
@@ -318,7 +372,7 @@ public class RedVial {
                 }
             }
         }
-        return Double.MAX_VALUE;
+        return distManhattan * 1.5;
     }
 
     public double distanciaMinima(Ubicacion origen, Ubicacion destino, LocalDateTime instante) {

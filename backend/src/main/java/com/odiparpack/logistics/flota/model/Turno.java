@@ -1,5 +1,6 @@
 package com.odiparpack.logistics.flota.model;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -24,7 +25,10 @@ import java.time.LocalTime;
 @Embeddable
 public class Turno {
 
+    @Column(name = "hora_inicio")
     private LocalTime horaInicio;
+
+    @Column(name = "hora_fin")
     private LocalTime horaFin;
 
     /**

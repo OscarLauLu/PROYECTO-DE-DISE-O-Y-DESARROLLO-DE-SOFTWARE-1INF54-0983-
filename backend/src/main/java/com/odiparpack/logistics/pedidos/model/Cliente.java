@@ -1,6 +1,7 @@
 package com.odiparpack.logistics.pedidos.model;
 
 import com.odiparpack.logistics.redvial.model.Ubicacion;
+import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -34,6 +35,7 @@ public class Cliente {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "id_cliente")
     private String idCliente;
 
     private String nombre;

@@ -1,5 +1,6 @@
 package com.odiparpack.logistics.redvial.model;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -16,7 +17,10 @@ import lombok.NoArgsConstructor;
 @Embeddable
 public class Ubicacion {
 
+    @Column(name = "pos_x")
     private int posX;
+
+    @Column(name = "pos_y")
     private int posY;
 
     /**

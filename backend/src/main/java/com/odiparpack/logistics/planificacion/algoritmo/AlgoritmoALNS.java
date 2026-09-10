@@ -94,7 +94,11 @@ public class AlgoritmoALNS implements AlgoritmoRuteo {
         if (almacenes.isEmpty()) {
             almacenes = crearAlmacenesPorDefecto();
         }
-        LocalDateTime tiempoInicio = LocalDateTime.now();
+        LocalDateTime tiempoInicio = pedidos.stream()
+                .map(Pedido::getFechaHoraRegistro)
+                .filter(java.util.Objects::nonNull)
+                .min(LocalDateTime::compareTo)
+                .orElse(LocalDateTime.now());
 
         // 1. Solución inicial constructiva
         this.actual = PlanSolution.asignacionVoraz(pedidos, flota, almacenes, red, tiempoInicio);

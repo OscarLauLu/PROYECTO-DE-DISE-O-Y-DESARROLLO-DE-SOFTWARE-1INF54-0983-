@@ -11,7 +11,7 @@ RUN mvn dependency:go-offline -B
 
 # 2. Copiar código fuente y compilar artefacto JAR
 COPY backend/src ./src
-RUN mvn clean package -DskipTests
+RUN mvn clean package -Dmaven.test.skip=true
 
 # ==============================================================================
 # ETAPA 2: Imagen final ligera de ejecución (Eclipse Temurin 17 JRE Alpine)

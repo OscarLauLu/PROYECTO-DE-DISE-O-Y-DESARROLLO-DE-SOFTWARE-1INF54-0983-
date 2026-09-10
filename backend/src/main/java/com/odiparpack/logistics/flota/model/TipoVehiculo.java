@@ -1,5 +1,6 @@
 package com.odiparpack.logistics.flota.model;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -29,12 +30,16 @@ public class TipoVehiculo {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "nombre")
     private String nombre;
 
+    @Column(name = "capacidad_maxima")
     private int capacidadMaxima;
 
+    @Column(name = "velocidad_promedio_km_h")
     private double velocidadPromedioKmH;
 
+    @Column(name = "costo_por_km")
     private double costoPorKm;
 
     public TipoVehiculo(String nombre, int capacidadMaxima, double velocidadPromedioKmH, double costoPorKm) {

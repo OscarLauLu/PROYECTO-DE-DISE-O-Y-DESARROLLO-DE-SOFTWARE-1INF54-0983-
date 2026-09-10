@@ -1,6 +1,7 @@
 package com.odiparpack.logistics.almacen.model;
 
 import com.odiparpack.logistics.redvial.model.Ubicacion;
+import jakarta.persistence.Column;
 import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
 import lombok.Getter;
@@ -21,8 +22,13 @@ import java.util.UUID;
 @NoArgsConstructor
 public class AlmacenIntermedio extends Almacen {
 
+    @Column(name = "capacidad_maxima")
     private int capacidadMaxima = 1000;
+
+    @Column(name = "umbral_alerta_ocupacion")
     private double umbralAlertaOcupacion = 90.0;
+
+    @Column(name = "hora_recarga_diaria")
     private LocalTime horaRecargaDiaria = LocalTime.of(23, 59, 59);
 
     public AlmacenIntermedio(String codigo, String nombre, Ubicacion ubicacion, int stockInicial) {

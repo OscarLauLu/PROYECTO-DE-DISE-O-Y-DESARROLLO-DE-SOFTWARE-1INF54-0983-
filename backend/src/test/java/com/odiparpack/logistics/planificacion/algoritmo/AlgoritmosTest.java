@@ -74,7 +74,7 @@ class AlgoritmosTest {
                 .fechaHoraRegistro(ahora)
                 .plazoLimiteEntrega(ahora.plusHours(6))
                 .estado(EstadoPedido.REGISTRADO)
-                .tipoEntrega(TipoEntrega.REGULAR_24H)
+                .tipoEntrega(TipoEntrega.REGULAR_36H)
                 .destino(new Ubicacion(12, 14))
                 .build());
 
@@ -85,7 +85,7 @@ class AlgoritmosTest {
                 .fechaHoraRegistro(ahora)
                 .plazoLimiteEntrega(ahora.plusHours(4))
                 .estado(EstadoPedido.REGISTRADO)
-                .tipoEntrega(TipoEntrega.EXPRESS_4H)
+                .tipoEntrega(TipoEntrega.PRIORIZADA_4H)
                 .destino(new Ubicacion(15, 12))
                 .build());
 
@@ -96,7 +96,7 @@ class AlgoritmosTest {
                 .fechaHoraRegistro(ahora)
                 .plazoLimiteEntrega(ahora.plusHours(8))
                 .estado(EstadoPedido.REGISTRADO)
-                .tipoEntrega(TipoEntrega.REGULAR_24H)
+                .tipoEntrega(TipoEntrega.REGULAR_36H)
                 .destino(new Ubicacion(18, 16))
                 .build());
 

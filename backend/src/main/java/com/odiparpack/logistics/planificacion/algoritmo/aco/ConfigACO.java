@@ -17,10 +17,10 @@ public class ConfigACO {
     private int minAnts = 10;
 
     @Builder.Default
-    private int maxAnts = 30;
+    private int maxAnts = 15;
 
     @Builder.Default
-    private int iterations = 40;
+    private int iterations = 15;
 
     @Builder.Default
     private double alpha = 1.0; // Exponente de influencia de la feromona

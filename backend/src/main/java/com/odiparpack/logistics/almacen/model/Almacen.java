@@ -2,6 +2,7 @@ package com.odiparpack.logistics.almacen.model;
 
 import com.odiparpack.logistics.redvial.model.Ubicacion;
 import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
 import jakarta.persistence.DiscriminatorColumn;
 import jakarta.persistence.DiscriminatorType;
 import jakarta.persistence.Embedded;
@@ -46,6 +47,7 @@ public abstract class Almacen {
     @Embedded
     private Ubicacion ubicacion;
 
+    @Column(name = "stock_actual")
     private int stockActual;
 
     @OneToMany(mappedBy = "almacen", cascade = CascadeType.ALL)

@@ -56,6 +56,7 @@ public class UnidadTransporte {
     @Embedded
     private Ubicacion ubicacionActual;
 
+    @Column(name = "carga_actual")
     @Builder.Default
     private int cargaActual = 0;
 
@@ -66,6 +67,7 @@ public class UnidadTransporte {
     @Builder.Default
     private boolean activo = true;
 
+    @Column(name = "fecha_ultimo_cambio_estado")
     private LocalDateTime fechaUltimoCambioEstado;
 
     @OneToMany(mappedBy = "unidad", cascade = CascadeType.ALL)
