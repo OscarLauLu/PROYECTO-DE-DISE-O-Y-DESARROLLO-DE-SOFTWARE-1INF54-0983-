@@ -14,9 +14,9 @@ import lombok.NoArgsConstructor;
 /**
  * Representa la tipología y parámetros operacionales de un tipo de vehículo (RF-39, RF-40, RF-41, RF-46).
  * Admite actualización en caliente durante la ejecución del sistema:
- * - Auto: 24 u | 40 km/h | S/8.00/km
- * - Moto: 8 u | 25 km/h | S/6.00/km
- * - Bicicleta: 4 u | 12 km/h | S/3.00/km
+ * - Auto: 24 u | 20 km/h | S/8.00/km
+ * - Moto: 8 u | 40 km/h | S/6.00/km
+ * - Bicicleta: 4 u | 14 km/h | S/3.00/km
  */
 @Data
 @Builder

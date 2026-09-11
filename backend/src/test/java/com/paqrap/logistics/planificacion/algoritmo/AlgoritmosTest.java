@@ -47,7 +47,7 @@ class AlgoritmosTest {
                 .id(1L)
                 .nombre("Auto")
                 .capacidadMaxima(24)
-                .velocidadPromedioKmH(40.0)
+                .velocidadPromedioKmH(20.0)
                 .costoPorKm(8.0)
                 .build();
 

@@ -35,17 +35,24 @@ public class BenchmarkMetaheuristicas {
 
         File dirDatos = new File("datos");
         if (!dirDatos.exists()) {
-            dirDatos = new File("../datos");
+            dirDatos = new File("/app/datos");
         }
         if (!dirDatos.exists()) {
-            dirDatos = new File("/home/sandbox/Documents/DP1/PROYECTO-DE-DISE-O-Y-DESARROLLO-DE-SOFTWARE-1INF54-0983-/datos");
+            dirDatos = new File("../datos");
         }
         String datosDir = dirDatos.getAbsolutePath();
 
-        String rutaVentas = datosDir + "/ventas.v20260909/ventas.202601.txt";
-        String rutaBloqueos = datosDir + "/bloqueos/bloqueo.2601.txt";
-        String rutaMantenimiento = datosDir + "/mant.preventivo.09.10.txt";
-        int maxPedidos = 30;
+        // Búsqueda dinámica de mantenimiento
+        File fMant = buscarArchivo(dirDatos, "mant.preventivo.09.10.txt");
+        if (fMant == null) {
+            File[] posibles = dirDatos.listFiles((d, n) -> n.toLowerCase().startsWith("mant") && n.endsWith(".txt"));
+            if (posibles != null && posibles.length > 0) fMant = posibles[0];
+        }
+        String rutaMantenimiento = fMant != null ? fMant.getAbsolutePath() : datosDir + "/mant.preventivo.09.10.txt";
+
+        String rutaVentas = "";
+        String rutaBloqueos = "";
+        int maxPedidos = 0;
 
         Integer customAutos = null;
         Integer customMotos = null;
@@ -70,23 +77,104 @@ public class BenchmarkMetaheuristicas {
             if (new File(args[0]).exists()) {
                 rutaVentas = args[0];
             } else if (args[0].matches("\\d{6}")) {
-                rutaVentas = datosDir + "/ventas.v20260909/ventas." + args[0] + ".txt";
-                rutaBloqueos = datosDir + "/bloqueos/bloqueo." + args[0].substring(2) + ".txt";
+                String mesStr = args[0];
+                File vFile = buscarArchivo(dirDatos, "ventas." + mesStr + ".txt");
+                rutaVentas = vFile != null ? vFile.getAbsolutePath() : datosDir + "/ventas.v20260909/ventas." + mesStr + ".txt";
+
+                String sufijoBloqueo = mesStr.substring(2);
+                File bFile = buscarArchivo(dirDatos, "bloqueo." + sufijoBloqueo + ".txt");
+                rutaBloqueos = bFile != null ? bFile.getAbsolutePath() : datosDir + "/bloqueos/bloqueo." + sufijoBloqueo + ".txt";
             }
+        }
+        if (rutaVentas.isEmpty()) {
+            File vDefault = buscarArchivo(dirDatos, "ventas.202601.txt");
+            rutaVentas = vDefault != null ? vDefault.getAbsolutePath() : datosDir + "/ventas.v20260909/ventas.202601.txt";
+            File bDefault = buscarArchivo(dirDatos, "bloqueo.2601.txt");
+            rutaBloqueos = bDefault != null ? bDefault.getAbsolutePath() : datosDir + "/bloqueos/bloqueo.2601.txt";
         }
         if (args.length > 1 && !args[1].trim().isEmpty() && !args[1].startsWith("--") && new File(args[1]).exists()) {
             rutaBloqueos = args[1];
         }
+        int diaInicio = 1;
+        int diasSimulacion = 0; // 0 = sin límite por días
+
+        // 1. Extraer flags explícitas
+        for (String a : args) {
+            String alow = a.trim().toLowerCase();
+            if (alow.startsWith("--inicio=") || alow.startsWith("--desde=") || alow.startsWith("--dia=")) {
+                try {
+                    diaInicio = Integer.parseInt(alow.substring(alow.indexOf('=') + 1).replaceAll("\\D", ""));
+                } catch (Exception ignored) {}
+            } else if (alow.matches("--dias=(\\d+)") || alow.matches("--(\\d+)d")) {
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)").matcher(alow);
+                if (m.find()) {
+                    diasSimulacion = Integer.parseInt(m.group(1));
+                    maxPedidos = 0;
+                }
+            } else if ("--5d".equalsIgnoreCase(a) || "5d".equalsIgnoreCase(a)) {
+                diasSimulacion = 5;
+                maxPedidos = 0;
+            }
+        }
+
+        // 2. Extraer del argumento posicional de límite (args[2])
         if (args.length > 2 && !args[2].trim().isEmpty() && !args[2].startsWith("--")) {
-            try {
-                maxPedidos = Integer.parseInt(args[2].trim());
-            } catch (Exception ignored) {}
+            String val = args[2].trim().toLowerCase();
+            // Rango: ej. "10-15d", "10..15", "10-15"
+            if (val.matches("(\\d+)[-\\.\\.]+(\\d+)d?")) {
+                java.util.regex.Matcher mr = java.util.regex.Pattern.compile("(\\d+)[-\\.\\.]+(\\d+)").matcher(val);
+                if (mr.find()) {
+                    int d1 = Integer.parseInt(mr.group(1));
+                    int d2 = Integer.parseInt(mr.group(2));
+                    diaInicio = Math.min(d1, d2);
+                    diasSimulacion = Math.max(1, Math.abs(d2 - d1));
+                    maxPedidos = 0;
+                }
+            // Formato inicio + duración: ej. "10+5d", "dia10+5"
+            } else if (val.matches(".*(\\d+)\\+(\\d+)d?")) {
+                java.util.regex.Matcher mp = java.util.regex.Pattern.compile("(\\d+)\\+(\\d+)").matcher(val);
+                if (mp.find()) {
+                    diaInicio = Integer.parseInt(mp.group(1));
+                    diasSimulacion = Integer.parseInt(mp.group(2));
+                    maxPedidos = 0;
+                }
+            // Formato duración simple: ej. "5d", "3d"
+            } else if (val.matches("(\\d+)d(ias)?")) {
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)d").matcher(val);
+                if (m.find()) {
+                    diasSimulacion = Integer.parseInt(m.group(1));
+                    maxPedidos = 0;
+                }
+            } else if ("todos".equals(val) || "all".equals(val) || "mes".equals(val)) {
+                maxPedidos = 0;
+            } else {
+                try {
+                    maxPedidos = Integer.parseInt(val);
+                } catch (Exception ignored) {}
+            }
+        }
+
+        // 3. Argumento posicional 4 opcional para día de inicio: ej. 202601 5d 10
+        if (args.length > 3 && !args[3].trim().isEmpty() && !args[3].startsWith("--")) {
+            if (args[3].matches("\\d+")) {
+                try {
+                    diaInicio = Integer.parseInt(args[3].trim());
+                } catch (Exception ignored) {}
+            }
+        }
+
+        String limiteStr = "Todos";
+        if (diasSimulacion > 0) {
+            int diaFin = diaInicio + diasSimulacion - 1;
+            limiteStr = String.format("Simulación de %d Días (días %02d al %02d)", diasSimulacion, diaInicio, diaFin);
+        } else if (maxPedidos > 0) {
+            limiteStr = maxPedidos + " pedidos";
         }
 
         System.out.println("Archivo de ventas   : " + rutaVentas);
         System.out.println("Archivo de bloqueos : " + rutaBloqueos);
         System.out.println("Plan de mantenim.   : " + (new File(rutaMantenimiento).exists() ? rutaMantenimiento : "(No disponible)"));
-        System.out.println("Límite de pedidos   : " + (maxPedidos > 0 ? maxPedidos : "Todos"));
+        System.out.println("Horizonte / Límite  : " + limiteStr);
 
         // 1. Inicializar Red Vial
         RedVial red = new RedVial();
@@ -110,12 +198,35 @@ public class BenchmarkMetaheuristicas {
 
         List<Pedido> pedidosPrueba = new ArrayList<>();
         int count = 0;
+        LocalDateTime fechaInicioFiltro = null;
+        LocalDateTime fechaFinFiltro = null;
+
         for (Pedido p : pedidosTodos) {
+            if (p.getFechaHoraRegistro() == null) continue;
+
+            if (diasSimulacion > 0) {
+                if (fechaInicioFiltro == null) {
+                    int anio = p.getFechaHoraRegistro().getYear();
+                    int mes = p.getFechaHoraRegistro().getMonthValue();
+                    LocalDate base = LocalDate.of(anio, mes, 1);
+                    int dIniVal = Math.max(1, Math.min(diaInicio, base.lengthOfMonth()));
+                    fechaInicioFiltro = LocalDate.of(anio, mes, dIniVal).atStartOfDay();
+                    fechaFinFiltro = fechaInicioFiltro.plusDays(diasSimulacion);
+                }
+
+                if (p.getFechaHoraRegistro().isBefore(fechaInicioFiltro)) {
+                    continue; // Aún no llega al día de inicio configurado
+                }
+                if (!p.getFechaHoraRegistro().isBefore(fechaFinFiltro)) {
+                    break; // Ya superó los N días de simulación
+                }
+            }
+
             pedidosPrueba.add(p);
             count++;
             if (maxPedidos > 0 && count >= maxPedidos) break;
         }
-        System.out.println("Pedidos a evaluar   : " + pedidosPrueba.size());
+        System.out.println("Pedidos a evaluar   : " + pedidosPrueba.size() + (diasSimulacion > 0 ? String.format(" (días %02d a %02d)", diaInicio, diaInicio + diasSimulacion - 1) : ""));
 
         // 4. Crear flota dinámica (descubierta desde archivo de mantenimiento o por parámetros)
         List<UnidadTransporte> flotaAco = crearFlotaDinamica(rutaMantenimiento, customAutos, customMotos, customBicis);
@@ -203,9 +314,9 @@ public class BenchmarkMetaheuristicas {
 
     public static List<UnidadTransporte> crearFlotaDinamica(String rutaMantenimiento, Integer nAutos, Integer nMotos, Integer nBicis) {
         List<UnidadTransporte> flota = new ArrayList<>();
-        TipoVehiculo auto = TipoVehiculo.builder().id(1L).nombre("Auto").capacidadMaxima(24).velocidadPromedioKmH(40.0).costoPorKm(8.0).build();
-        TipoVehiculo moto = TipoVehiculo.builder().id(2L).nombre("Moto").capacidadMaxima(8).velocidadPromedioKmH(25.0).costoPorKm(6.0).build();
-        TipoVehiculo bici = TipoVehiculo.builder().id(3L).nombre("Bicicleta").capacidadMaxima(4).velocidadPromedioKmH(12.0).costoPorKm(3.0).build();
+        TipoVehiculo auto = TipoVehiculo.builder().id(1L).nombre("Auto").capacidadMaxima(24).velocidadPromedioKmH(20.0).costoPorKm(8.0).build();
+        TipoVehiculo moto = TipoVehiculo.builder().id(2L).nombre("Moto").capacidadMaxima(8).velocidadPromedioKmH(40.0).costoPorKm(6.0).build();
+        TipoVehiculo bici = TipoVehiculo.builder().id(3L).nombre("Bicicleta").capacidadMaxima(4).velocidadPromedioKmH(14.0).costoPorKm(3.0).build();
 
         Set<String> codigosEncontrados = new TreeSet<>();
         if (rutaMantenimiento != null && new File(rutaMantenimiento).exists()) {
@@ -375,5 +486,20 @@ public class BenchmarkMetaheuristicas {
         double costoTotal = 0.0;
         long tiempoMs = 0;
         double tiempoPromedioMin = 0.0;
+    }
+
+    private static File buscarArchivo(File dir, String nombre) {
+        if (dir == null || !dir.exists()) return null;
+        File[] files = dir.listFiles();
+        if (files == null) return null;
+        for (File f : files) {
+            if (f.isFile() && f.getName().equalsIgnoreCase(nombre)) {
+                return f;
+            } else if (f.isDirectory() && !f.getName().startsWith(".")) {
+                File found = buscarArchivo(f, nombre);
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 }

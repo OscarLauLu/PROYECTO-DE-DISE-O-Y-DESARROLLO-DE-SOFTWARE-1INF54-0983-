@@ -26,7 +26,7 @@ services:
     container_name: paqrap-benchmark
     volumes:
       - ./datos:/app/datos:ro
-    command: ["benchmark", "202601", "30"]
+    command: ["benchmark"]
 
   # ----------------------------------------------------------------------------
   # Base de Datos PostgreSQL opcional (para perfil prod)
